@@ -458,16 +458,18 @@ const SetupScreen = ({user}) => {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail}) => {
+const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, sellPrice, costPrice}) => {
   const [hide, setHide] = useState(false);
+  const SP = sellPrice || DEFAULT_SELL_PRICE;
+  const CP = costPrice || DEFAULT_COST_PRICE;
 
   const totals = entries.slice(0,7).reduce((a,e)=>{
-    const c=calcEntry(e);
-    return {rev:a.rev+c.sales, gas:a.gas+c.gas, profit:a.profit+c.profit, exp:a.exp+c.exp};
-  },{rev:0,gas:0,profit:0,exp:0});
+    const c=calcEntry(e, SP, CP);
+    return {rev:a.rev+c.sales, gas:a.gas+c.gas, profit:a.profit+c.profit, grossP:a.grossP+c.grossProfit, exp:a.exp+c.exp};
+  },{rev:0,gas:0,profit:0,grossP:0,exp:0});
 
   const today  = entries[0];
-  const todayC = today ? calcEntry(today) : null;
+  const todayC = today ? calcEntry(today, SP, CP) : null;
 
   const MiniBar = ({data}) => {
     const max = Math.max(...data.map(d=>d.v), 1);
@@ -563,10 +565,16 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail}) => {
         {/* 7-day stats */}
         <SLabel>7-day summary</SLabel>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-          {[["Revenue",fmt(totals.rev),"#fff",T.primary],["Gas sold",fmtKg(totals.gas),T.text,T.surface],["Net profit",fmt(totals.profit),T.text,T.surface],["Expenses",fmt(totals.exp),T.text,T.surface]].map(([l,v,tc,bg],i)=>(
-            <div key={l} style={{background:bg,borderRadius:R.lg,border:`1px solid ${i===0?"transparent":T.border}`,padding:"12px 14px"}}>
-              <div style={{fontSize:11,color:i===0?"rgba(255,255,255,.5)":T.muted,fontFamily:F,fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>{l}</div>
-              <div style={{fontSize:18,fontWeight:700,color:i===0?T.gold:T.text,fontFamily:F}}>{v}</div>
+          {[
+            {l:"Revenue",     v:fmt(totals.rev),    vc:T.gold,                                       bg:T.primary, sub:"all days"},
+            {l:"Gas sold",    v:fmtKg(totals.gas),  vc:T.text,                                       bg:T.surface, sub:`avg ${fmtKg(Math.round(totals.gas/Math.max(1,Math.min(7,entries.length))))} /day`},
+            {l:"Gross profit",v:fmt(totals.grossP), vc:totals.grossP>=0?T.success:T.danger,          bg:T.surface, sub:CP>0?`₦${SP-CP}/kg margin`:"add cost in Stock"},
+            {l:"Expenses",    v:fmt(totals.exp),    vc:T.text,                                       bg:T.surface, sub:"operating costs"},
+          ].map(({l,v,vc,bg,sub})=>(
+            <div key={l} style={{background:bg,borderRadius:R.lg,border:`1px solid ${bg===T.primary?"transparent":T.border}`,padding:"12px 14px"}}>
+              <div style={{fontSize:11,color:bg===T.primary?"rgba(255,255,255,.5)":T.muted,fontFamily:F,fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{l}</div>
+              <div style={{fontSize:18,fontWeight:700,color:vc,fontFamily:F}}>{v}</div>
+              <div style={{fontSize:11,color:bg===T.primary?"rgba(255,255,255,.4)":T.muted,marginTop:3,fontFamily:F}}>{sub}</div>
             </div>
           ))}
         </div>
@@ -608,7 +616,7 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail}) => {
         ):(
           <Card>
             {entries.slice(0,5).map((e,i)=>{
-              const c=calcEntry(e);
+              const c=calcEntry(e, SP, CP);
               return (
                 <div key={e.id} onClick={()=>goDayDetail(e)}
                   style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<Math.min(4,entries.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer"}}
@@ -623,8 +631,8 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail}) => {
                     <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:1}}>{fmtKg(c.gas)} · {(e.expenses||[]).length} expense(s)</div>
                   </div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:c.profit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.profit)}</div>
-                    <div style={{fontSize:10,color:T.muted,fontFamily:F}}>profit</div>
+                    <div style={{fontSize:13,fontWeight:700,color:c.grossProfit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.grossProfit)}</div>
+                    <div style={{fontSize:10,color:T.muted,fontFamily:F}}>gross profit</div>
                   </div>
                 </div>
               );
@@ -1230,32 +1238,31 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
           {/* Day-by-day table */}
           <SLabel>Day-by-day breakdown</SLabel>
           <Card style={{marginBottom:16}}>
-            {/* Table header */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 70px",gap:0,padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`}}>
-              {["Date","Sales","Gas","Profit"].map(h=>(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 76px",gap:0,padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`}}>
+              {["Date","Sales","Gas","Gross P"].map(h=>(
                 <span key={h} style={{fontSize:10,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.4,fontFamily:F,textAlign:h!=="Date"?"right":"left"}}>{h}</span>
               ))}
             </div>
             {filtered.map((e,i)=>{
-              const c=calcEntry(e);
+              const c=calcEntry(e, SP, CP);
               return (
-                <div key={e.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 70px",gap:0,padding:"10px 14px",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",alignItems:"center"}}>
+                <div key={e.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 76px",gap:0,padding:"10px 14px",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",alignItems:"center"}}>
                   <div>
                     <div style={{fontSize:12,fontWeight:500,color:T.text,fontFamily:F}}>{fmtShort(e.date)}</div>
                     <div style={{fontSize:10,color:T.muted,fontFamily:F,marginTop:1}}>{(e.expenses||[]).length} exp</div>
                   </div>
                   <div style={{textAlign:"right",fontSize:12,fontWeight:600,color:T.text,fontFamily:F}}>{fmt(c.sales)}</div>
                   <div style={{textAlign:"right",fontSize:12,color:T.muted,fontFamily:F}}>{fmtKg(c.gas)}</div>
-                  <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:c.profit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.profit)}</div>
+                  <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:c.grossProfit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.grossProfit)}</div>
                 </div>
               );
             })}
             {/* Totals row */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 70px",gap:0,padding:"10px 14px",background:T.bg,borderTop:`1px solid ${T.border}`}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 76px",gap:0,padding:"10px 14px",background:T.bg,borderTop:`1px solid ${T.border}`}}>
               <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:F}}>Total ({days}d)</span>
               <span style={{textAlign:"right",fontSize:12,fontWeight:700,color:T.text,fontFamily:F}}>{fmt(totals.rev)}</span>
               <span style={{textAlign:"right",fontSize:12,fontWeight:600,color:T.muted,fontFamily:F}}>{fmtKg(totals.gas)}</span>
-              <span style={{textAlign:"right",fontSize:13,fontWeight:700,color:totals.profit>=0?T.success:T.danger,fontFamily:F}}>{fmt(totals.profit)}</span>
+              <span style={{textAlign:"right",fontSize:13,fontWeight:700,color:totals.grossP>=0?T.success:T.danger,fontFamily:F}}>{fmt(totals.grossP)}</span>
             </div>
           </Card>
         </>)}
@@ -1304,7 +1311,10 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
 // ═══════════════════════════════════════════════════════════════
 // HISTORY
 // ═══════════════════════════════════════════════════════════════
-const HistoryScreen = ({entries, back, goDayDetail}) => (
+const HistoryScreen = ({entries, back, goDayDetail, sellPrice, costPrice}) => {
+  const SP = sellPrice || DEFAULT_SELL_PRICE;
+  const CP = costPrice || DEFAULT_COST_PRICE;
+  return (
   <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
     <TopBar title="All entries" left={<BackBtn onClick={back}/>} right={<Badge label={`${entries.length} days`}/>}/>
     <div style={{flex:1,overflow:"auto",padding:"16px 16px 24px"}}>
@@ -1313,7 +1323,7 @@ const HistoryScreen = ({entries, back, goDayDetail}) => (
       ):(
         <Card>
           {entries.map((e,i)=>{
-            const c=calcEntry(e);
+            const c=calcEntry(e, SP, CP);
             return (
               <div key={e.id} onClick={()=>goDayDetail(e)}
                 style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<entries.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
@@ -1328,8 +1338,8 @@ const HistoryScreen = ({entries, back, goDayDetail}) => (
                   <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:1}}>{fmtKg(c.gas)} · {(e.expenses||[]).length} expense(s)</div>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:13,fontWeight:700,color:c.profit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.profit)}</div>
-                  <div style={{fontSize:10,color:T.muted,fontFamily:F}}>profit</div>
+                  <div style={{fontSize:13,fontWeight:700,color:c.grossProfit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.grossProfit)}</div>
+                  <div style={{fontSize:10,color:T.muted,fontFamily:F}}>gross profit</div>
                 </div>
               </div>
             );
@@ -1338,7 +1348,8 @@ const HistoryScreen = ({entries, back, goDayDetail}) => (
       )}
     </div>
   </div>
-);
+  );
+};
 
 // ═══════════════════════════════════════════════════════════════
 // DAY DETAIL
@@ -2067,11 +2078,11 @@ export default function GasLedgerApp() {
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail}/>}
+        {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="entry"     && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice}/>}
         {screen==="stock"     && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"       && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
-        {screen==="history"   && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail}/>}
+        {screen==="history"   && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="detail"    && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
         {screen==="settings"  && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser}/></Gate>}
       </div>
