@@ -7,10 +7,11 @@ import { useState, useEffect, useCallback } from "react";
 import {
   useAuth, useUserProfile,
   useEntries, useDeliveries, usePrices,
-  useInvites, useStaffMembers,
-  addEntry    as fbAddEntry,
-  addDelivery as fbAddDelivery,
-  addPrice    as fbAddPrice,
+  useInvites, useStaffMembers, useRemittances,
+  addEntry       as fbAddEntry,
+  addDelivery    as fbAddDelivery,
+  addPrice       as fbAddPrice,
+  addRemittance  as fbAddRemittance,
   updateEntry    as fbUpdateEntry,
   updateDelivery as fbUpdateDelivery,
   deleteEntry    as fbDeleteEntry,
@@ -124,6 +125,8 @@ const Icon = ({ n, s=20, c="currentColor" }) => {
     copy:    "M8 17.929H6c-1.105 0-2-.912-2-2.036V5.036C4 3.91 4.895 3 6 3h8c1.105 0 2 .911 2 2.036v1.866m-6 .17h8c1.105 0 2 .91 2 2.035v10.857C20 21.09 19.105 22 18 22h-8c-1.105 0-2-.911-2-2.036V9.107c0-1.124.895-2.036 2-2.036z",
     flame:   "M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z M12 7v5l3 3",
     share:   "M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8 M16 6l-4-4-4 4 M12 2v13",
+    cash:    "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+    wallet:  "M2 8h20v12a2 2 0 01-2 2H4a2 2 0 01-2-2V8z M2 8l10-6 10 6 M12 12h.01",
   };
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -226,16 +229,17 @@ const TopBar = ({title, left, right, dark=true}) => (
 // ── Bottom nav ───────────────────────────────────────────────
 const BottomNav = ({active, onChange, role="owner"}) => {
   const ownerTabs = [
-    {id:"dashboard", icon:"home",     label:"Home"},
-    {id:"entry",     icon:"entry",    label:"Entry"},
-    {id:"stock",     icon:"truck",    label:"Stock"},
-    {id:"pnl",       icon:"pnl",      label:"P&L"},
-    {id:"settings",  icon:"settings", label:"Settings"},
+    {id:"dashboard",   icon:"home",     label:"Home"},
+    {id:"entry",       icon:"entry",    label:"Entry"},
+    {id:"stock",       icon:"truck",    label:"Stock"},
+    {id:"monthly",     icon:"history",  label:"Monthly"},
+    {id:"settings",    icon:"settings", label:"Settings"},
   ];
   const staffTabs = [
-    {id:"dashboard", icon:"home",     label:"Home"},
-    {id:"entry",     icon:"entry",    label:"Entry"},
-    {id:"history",   icon:"history",  label:"History"},
+    {id:"dashboard",   icon:"home",     label:"Home"},
+    {id:"entry",       icon:"entry",    label:"Entry"},
+    {id:"remittance",  icon:"cash",     label:"Cash"},
+    {id:"history",     icon:"history",  label:"History"},
   ];
   const tabs = role === "staff" ? staffTabs : ownerTabs;
   return (
@@ -1274,7 +1278,7 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 // ═══════════════════════════════════════════════════════════════
 // P&L REPORT
 // ═══════════════════════════════════════════════════════════════
-const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
+const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -1302,9 +1306,12 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
     { id:"lastmonth", label:"Last month",  from:monthStart(-1),to:monthEnd(-1) },
   ];
 
-  const [preset,   setPreset]   = useState("thisweek");
-  const [fromDate, setFromDate] = useState(PRESETS[1].from);
-  const [toDate,   setToDate]   = useState(PRESETS[1].to);
+  // If opened from Monthly screen, pre-select that month
+  const initFrom = initialMonth ? initialMonth+"-01" : PRESETS[1].from;
+  const initTo   = initialMonth ? (()=>{ const d=new Date(initialMonth+"-01"); d.setMonth(d.getMonth()+1); d.setDate(0); return d.toISOString().split("T")[0]; })() : PRESETS[1].to;
+  const [preset,   setPreset]   = useState(initialMonth?"custom":"thisweek");
+  const [fromDate, setFromDate] = useState(initFrom);
+  const [toDate,   setToDate]   = useState(initTo);
   const [showPicker, setShowPicker] = useState(false);
   const [draftFrom, setDraftFrom]   = useState(fromDate);
   const [draftTo,   setDraftTo]     = useState(toDate);
@@ -2480,24 +2487,431 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// ROOT
+// REMITTANCE / CASH DRAWER RECONCILIATION
+// ═══════════════════════════════════════════════════════════════
+const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) => {
+  const today     = new Date().toISOString().split("T")[0];
+  const todayEntry= entries.find(e => e.date === today);
+
+  const [date,        setDate]        = useState(today);
+  const [cashInDrawer,setCashInDrawer]= useState("");
+  const [note,        setNote]        = useState("");
+  const [ld,          setLd]          = useState(false);
+  const [done,        setDone]        = useState(null); // null | result object
+  const [err,         setErr]         = useState("");
+
+  // Entry for selected date
+  const selectedEntry = entries.find(e => e.date === date);
+  const recordedCash  = selectedEntry ? selectedEntry.cashSales : null;
+  const diff          = recordedCash !== null && cashInDrawer !== ""
+    ? Number(cashInDrawer) - recordedCash
+    : null;
+  const status = diff === null ? null : diff === 0 ? "match" : diff > 0 ? "surplus" : "shortfall";
+
+  // Already submitted for this date?
+  const existing = remittances.find(r => r.date === date);
+
+  const save = async () => {
+    if (!selectedEntry) { setErr("No daily entry found for this date. Log the entry first."); return; }
+    if (cashInDrawer === "") { setErr("Please enter the cash amount in the drawer."); return; }
+    setLd(true); setErr("");
+    try {
+      const rec = {
+        date,
+        entryId:      selectedEntry.id,
+        cashInDrawer: Number(cashInDrawer),
+        recordedCash,
+        difference:   diff,
+        status,
+        note,
+        submittedBy,
+      };
+      await onSave(rec);
+      setDone(rec);
+    } catch(e) {
+      setErr(e.message || "Save failed. Try again.");
+    } finally { setLd(false); }
+  };
+
+  // ── Status colours ─────────────────────────────────────────
+  const statusStyle = {
+    match:     { bg:`${T.success}12`, border:T.success,  c:T.success,  label:"Exact match",            icon:"check"  },
+    surplus:   { bg:`${T.warning}12`, border:T.warning,  c:T.warning,  label:"Surplus — over-collected",icon:"alert"  },
+    shortfall: { bg:`${T.danger}12`,  border:T.danger,   c:T.danger,   label:"Shortfall — cash missing", icon:"alert"  },
+  }[status] || null;
+
+  // ── Done screen ────────────────────────────────────────────
+  if (done) {
+    const ss = statusStyle;
+    return (
+      <div style={{flex:1,display:"flex",flexDirection:"column",background:T.bg,fontFamily:F}}>
+        <div style={{background:T.primary,padding:"32px 24px 28px",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+          <div style={{width:56,height:56,borderRadius:"50%",background:"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Icon n={status==="match"?"check":"alert"} s={28} c={status==="match"?T.gold:"#fca5a5"}/>
+          </div>
+          <div style={{fontSize:20,fontWeight:700,color:"#fff",textAlign:"center"}}>Remittance recorded</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,.55)",textAlign:"center"}}>{fmtD(done.date)}</div>
+        </div>
+        <div style={{padding:"16px 16px 0",display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{background:ss?.bg||T.bg,border:`1.5px solid ${ss?.border||T.border}`,borderRadius:R.lg,padding:"16px"}}>
+            <div style={{fontSize:13,fontWeight:700,color:ss?.c||T.text,marginBottom:12}}>{ss?.label}</div>
+            {[
+              ["Cash in drawer",  fmt(done.cashInDrawer)],
+              ["Recorded (entry)",fmt(done.recordedCash)],
+              ["Difference",      (done.difference>=0?"+":"")+fmt(done.difference)],
+            ].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
+                <span style={{fontSize:13,color:T.muted,fontFamily:F}}>{l}</span>
+                <span style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{v}</span>
+              </div>
+            ))}
+            {done.note&&<div style={{marginTop:10,fontSize:12,color:T.muted,fontStyle:"italic"}}>{done.note}</div>}
+          </div>
+          {status==="shortfall"&&(
+            <div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"10px 14px",fontSize:12,color:T.danger,lineHeight:1.5}}>
+              A shortfall of <strong>{fmt(Math.abs(done.difference))}</strong> has been recorded. The plant owner will be able to see this in the remittance history.
+            </div>
+          )}
+          <Btn label="Back to home" onClick={back} size="lg"/>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
+      <TopBar title="Cash remittance" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
+
+      <div style={{flex:1,overflow:"auto",padding:"16px 16px 32px"}}>
+
+        {/* What this screen does */}
+        <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
+          <Icon n="cash" s={18} c={T.primary}/>
+          <div style={{fontSize:12,color:T.text2,lineHeight:1.6}}>
+            Count the cash in your drawer and enter the total below. The app will compare it to what was recorded in today's entry and flag any difference.
+          </div>
+        </div>
+
+        {/* Date selector */}
+        <SLabel mt={0}>Select date</SLabel>
+        <Input value={date} onChange={setDate} type="date"/>
+
+        {/* Today's entry summary */}
+        {selectedEntry ? (
+          <Card pad="14px" style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.6,marginBottom:10}}>Entry for {fmtD(date)}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {[
+                ["Recorded cash sales", fmt(selectedEntry.cashSales),  false],
+                ["POS / transfer",       fmt(selectedEntry.posSales),   false],
+                ["Total sales",          fmt(selectedEntry.cashSales+selectedEntry.posSales), true],
+                ["Gas dispensed",        fmtKg(selectedEntry.closeMeter-selectedEntry.openMeter), false],
+              ].map(([l,v,bold])=>(
+                <div key={l} style={{background:T.bg,borderRadius:R.sm,padding:"9px 10px"}}>
+                  <div style={{fontSize:10,color:T.muted,fontFamily:F,textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>{l}</div>
+                  <div style={{fontSize:bold?16:14,fontWeight:bold?700:600,color:T.text,fontFamily:F}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : (
+          <div style={{background:`${T.warning}10`,borderRadius:R.md,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"center"}}>
+            <Icon n="alert" s={16} c={T.warning}/>
+            <span style={{fontSize:12,color:T.warning,fontFamily:F}}>No entry found for {fmtD(date)}. Log the daily entry first.</span>
+          </div>
+        )}
+
+        {/* Already submitted warning */}
+        {existing&&(
+          <div style={{background:`${T.warning}10`,border:`1px solid ${T.warning}`,borderRadius:R.md,padding:"10px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
+            <Icon n="alert" s={16} c={T.warning}/>
+            <div>
+              <div style={{fontSize:12,fontWeight:600,color:T.warning,fontFamily:F}}>Already submitted for this date</div>
+              <div style={{fontSize:11,color:T.muted,marginTop:2}}>
+                Cash: {fmt(existing.cashInDrawer)} · Difference: {existing.difference>=0?"+":""}{fmt(existing.difference)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cash input */}
+        <SLabel>Cash count</SLabel>
+        <Card pad="14px" style={{marginBottom:12}}>
+          <Input
+            label="Cash in drawer (count physically)"
+            value={cashInDrawer}
+            onChange={v=>{setCashInDrawer(v);setErr("");}}
+            type="number"
+            prefix="₦"
+            placeholder="e.g. 42100"
+            hint="Count every note and coin in the drawer right now."
+          />
+          {/* Quick amount chips */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-6,marginBottom:4}}>
+            {[5000,10000,20000,50000,100000].map(v=>(
+              <button key={v} onClick={()=>setCashInDrawer(String((Number(cashInDrawer)||0)+v))}
+                style={{padding:"4px 10px",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.pill,fontSize:11,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:F}}>
+                +{v>=1000?(v/1000)+"k":v}
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        {/* Live difference preview */}
+        {diff !== null && statusStyle && (
+          <div style={{background:statusStyle.bg,border:`1.5px solid ${statusStyle.border}`,borderRadius:R.lg,padding:"14px 16px",marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <Icon n={statusStyle.icon} s={18} c={statusStyle.c}/>
+                <span style={{fontSize:14,fontWeight:700,color:statusStyle.c,fontFamily:F}}>{statusStyle.label}</span>
+              </div>
+              <span style={{fontSize:18,fontWeight:800,color:statusStyle.c,fontFamily:F}}>
+                {diff>=0?"+":"-"}{fmt(Math.abs(diff))}
+              </span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {[
+                ["Cash in drawer",   fmt(Number(cashInDrawer))],
+                ["Recorded (entry)", fmt(recordedCash)],
+              ].map(([l,v])=>(
+                <div key={l} style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:12,color:T.muted,fontFamily:F}}>{l}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:F}}>{v}</span>
+                </div>
+              ))}
+            </div>
+            {status==="shortfall"&&(
+              <div style={{marginTop:10,fontSize:12,color:T.danger,lineHeight:1.5,fontFamily:F}}>
+                {fmt(Math.abs(diff))} is unaccounted for. Check your POS receipts or ask about any refunds before submitting.
+              </div>
+            )}
+            {status==="surplus"&&(
+              <div style={{marginTop:10,fontSize:12,color:T.warning,lineHeight:1.5,fontFamily:F}}>
+                You have {fmt(diff)} more than recorded. Double-check your count before submitting.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Note */}
+        <SLabel>Note (optional)</SLabel>
+        <Card pad="12px 14px" style={{marginBottom:20}}>
+          <textarea
+            value={note}
+            onChange={e=>setNote(e.target.value)}
+            placeholder="e.g. Short by ₦2,000 — customer owes from morning…"
+            rows={3}
+            style={{width:"100%",border:"none",outline:"none",fontSize:13,fontFamily:F,color:T.text,resize:"none",background:"transparent",boxSizing:"border-box"}}
+          />
+        </Card>
+
+        {err&&<ErrBanner msg={err}/>}
+
+        <Btn
+          label="Submit remittance"
+          onClick={save}
+          disabled={!selectedEntry||cashInDrawer===""}
+          loading={ld}
+          size="lg"
+          icon="check"
+        />
+        <div style={{marginTop:8}}>
+          <Btn label="Cancel" onClick={back} variant="outline" size="lg"/>
+        </div>
+
+        {/* History — last 7 submissions */}
+        {remittances.length > 0 && (<>
+          <SLabel>Recent submissions</SLabel>
+          <Card>
+            {remittances.slice(0,7).map((r,i)=>{
+              const ss = {
+                match:     {c:T.success, label:"Match"},
+                surplus:   {c:T.warning, label:"Surplus"},
+                shortfall: {c:T.danger,  label:"Shortfall"},
+              }[r.status]||{c:T.muted,label:"—"};
+              return (
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<Math.min(6,remittances.length-1)?`1px solid ${T.border}`:"none"}}>
+                  <div style={{width:40,height:40,borderRadius:R.md,background:`${ss.c}12`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{fontSize:14,fontWeight:700,color:ss.c,lineHeight:1}}>{new Date(r.date).getDate()}</span>
+                    <span style={{fontSize:9,color:T.muted}}>{new Date(r.date).toLocaleDateString("en-NG",{month:"short"})}</span>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{fmtD(r.date)}</div>
+                    <div style={{fontSize:11,color:T.muted,marginTop:1}}>
+                      Drawer: {fmt(r.cashInDrawer)} · Recorded: {fmt(r.recordedCash)}
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:ss.c}}>{r.difference>=0?"+":""}{fmt(r.difference)}</div>
+                    <div style={{fontSize:10,color:ss.c,marginTop:1}}>{ss.label}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </>)}
+        <div style={{height:16}}/>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
+// MONTHLY SUMMARY SCREEN
+// ═══════════════════════════════════════════════════════════════
+const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice }) => {
+  const SP = sellPrice || DEFAULT_SELL_PRICE;
+  const CP = costPrice || DEFAULT_COST_PRICE;
+
+  // Group entries by YYYY-MM
+  const monthMap = {};
+  entries.forEach(e => {
+    const key = e.date.slice(0,7);
+    if (!monthMap[key]) monthMap[key] = [];
+    monthMap[key].push(e);
+  });
+
+  const months = Object.keys(monthMap).sort((a,b)=>b.localeCompare(a)).map(key => {
+    const mes = monthMap[key];
+    const totals = mes.reduce((a,e)=>{
+      const c=calcEntry(e,SP,CP);
+      return {rev:a.rev+c.sales, grossP:a.grossP+c.grossProfit, gas:a.gas+c.gas, profit:a.profit+c.profit};
+    },{rev:0,grossP:0,gas:0,profit:0});
+    const best   = mes.reduce((a,e)=>calcEntry(e,SP,CP).grossProfit>calcEntry(a,SP,CP).grossProfit?e:a);
+    const sorted = [...mes].sort((a,b)=>a.date.localeCompare(b.date));
+    const spark  = sorted.map(e=>calcEntry(e,SP,CP).grossProfit);
+    const d      = new Date(key+"-01");
+    const label  = d.toLocaleDateString("en-NG",{month:"long",year:"numeric"});
+    const margin = totals.rev>0?Math.round((totals.grossP/totals.rev)*100):0;
+    return {key,label,days:mes.length,totals,best,spark,margin};
+  });
+
+  // SVG sparkline
+  const Sparkline = ({data,color=T.primary,h=40,w=72}) => {
+    if (data.length < 2) return <div style={{width:w,height:h}}/>;
+    const max=Math.max(...data,1), min=Math.min(...data,0), range=max-min||1;
+    const pts=data.map((v,i)=>{
+      const x=(i/Math.max(data.length-1,1))*w;
+      const y=h-((v-min)/range)*(h-4)-2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    const last=pts.split(" ").pop().split(",");
+    return (
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{display:"block",flexShrink:0}}>
+        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <circle cx={last[0]} cy={last[1]} r="2.5" fill={color}/>
+      </svg>
+    );
+  };
+
+  const yearTotals=months.slice(0,12).reduce((a,m)=>({rev:a.rev+m.totals.rev,grossP:a.grossP+m.totals.grossP,gas:a.gas+m.totals.gas}),{rev:0,grossP:0,gas:0});
+  const yearMargin=yearTotals.rev>0?Math.round((yearTotals.grossP/yearTotals.rev)*100):0;
+
+  if (!months.length) return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",background:T.bg,fontFamily:F}}>
+      <TopBar title="Monthly summary" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:32,textAlign:"center",color:T.muted,fontSize:13}}>No entries yet.</div>
+    </div>
+  );
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
+      <TopBar title="Monthly summary" dark={false}
+        left={<BackBtn onClick={back} dark={false}/>}
+        right={<Badge label={`${months.length} month${months.length!==1?"s":""}`}/>}
+      />
+      <div style={{flex:1,overflow:"auto",padding:"16px 16px 24px"}}>
+
+        {/* Year strip */}
+        {months.length>1&&(
+          <Card pad="0" style={{marginBottom:16,background:T.primary,border:"none"}}>
+            <div style={{padding:"12px 16px 14px"}}>
+              <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>Last {Math.min(months.length,12)} months</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                {[["Revenue",fmt(yearTotals.rev),T.gold],["Gross profit",fmt(yearTotals.grossP),yearMargin>15?"#6ee7b7":"#fca5a5"],["Gas sold",fmtKg(yearTotals.gas),"rgba(255,255,255,.8)"]].map(([l,v,c])=>(
+                  <div key={l}>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,.45)",marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:c}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:10,fontSize:11,color:"rgba(255,255,255,.4)"}}>Avg gross margin: {yearMargin}%</div>
+            </div>
+          </Card>
+        )}
+
+        {/* Month cards */}
+        {months.map((m,idx)=>(
+          <div key={m.key} onClick={()=>goMonthPnL(m.key)}
+            style={{background:T.surface,borderRadius:R.lg,border:`1px solid ${T.border}`,marginBottom:10,overflow:"hidden",cursor:"pointer",transition:"transform .12s"}}
+            onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
+            onMouseLeave={e=>e.currentTarget.style.transform="none"}
+          >
+            {/* Header */}
+            <div style={{padding:"12px 14px 10px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:T.text}}>{m.label}</div>
+                <div style={{fontSize:11,color:T.muted,marginTop:2}}>{m.days} day{m.days!==1?"s":""} recorded{idx===0?" · current":""}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <Badge label={`${m.margin}%`} variant={m.margin>20?"success":m.margin>10?"warning":"danger"}/>
+                <Icon n="chevron" s={16} c={T.muted}/>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:12}}>
+              <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {[
+                  {l:"Revenue",     v:fmt(m.totals.rev),    bold:true},
+                  {l:"Gross profit",v:fmt(m.totals.grossP), bold:false},
+                  {l:"Gas sold",    v:fmtKg(m.totals.gas),  bold:false},
+                  {l:"Best day",    v:fmtShort(m.best.date),bold:false},
+                ].map(({l,v,bold})=>(
+                  <div key={l}>
+                    <div style={{fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:.4,marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:bold?15:12,fontWeight:bold?700:500,color:T.text}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+                <Sparkline data={m.spark} color={m.margin>15?T.success:m.margin>8?T.warning:T.danger} h={44} w={72}/>
+                <div style={{fontSize:9,color:T.muted}}>daily gross profit</div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{padding:"0 14px 10px",borderTop:`1px solid ${T.border}`,paddingTop:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:11,color:T.muted}}>Best: {fmtD(m.best.date)} · {fmt(calcEntry(m.best,SP,CP).grossProfit)}</div>
+              <div style={{fontSize:11,fontWeight:600,color:T.primary}}>Open P&L →</div>
+            </div>
+          </div>
+        ))}
+        <div style={{height:16}}/>
+      </div>
+    </div>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════
 export default function GasLedgerApp() {
   const {user, loading:authLd}    = useAuth();
   const {profile, loading:profLd} = useUserProfile(user?.uid);
 
-  const [screen,      setScreen]      = useState("dashboard");
-  const [detail,      setDetail]      = useState(null);
+  const [screen,        setScreen]        = useState("dashboard");
+  const [detail,        setDetail]        = useState(null);
   const [pendingInvite, setPendingInvite] = useState(null);
   const [inviteChecked, setInviteChecked] = useState(false);
+  const [monthlyKey,    setMonthlyKey]    = useState(null); // "2025-06" → opens P&L for that month
 
   const role    = profile?.role || "owner";
   const plantId = profile?.plantId;
   const isStaff = role === "staff";
 
-  const {data:entries,    loading:eLd} = useEntries(plantId);
-  const {data:deliveries, loading:dLd} = useDeliveries(plantId);
-  const {data:prices,     loading:pLd} = usePrices(plantId);
+  const {data:entries,      loading:eLd} = useEntries(plantId);
+  const {data:deliveries,   loading:dLd} = useDeliveries(plantId);
+  const {data:prices,       loading:pLd} = usePrices(plantId);
+  const {data:remittances              } = useRemittances(plantId);
 
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
@@ -2506,6 +2920,7 @@ export default function GasLedgerApp() {
   const addEntry      = useCallback(e   => fbAddEntry(plantId,e),         [plantId]);
   const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
   const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
+  const addRemittance = useCallback(r   => fbAddRemittance(plantId,r),    [plantId]);
   const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
   const updateDelivery= useCallback((id,d) => fbUpdateDelivery(plantId,id,d),[plantId]);
   const deleteEntry   = useCallback(id  => fbDeleteEntry(plantId,id),     [plantId]);
@@ -2586,20 +3001,23 @@ export default function GasLedgerApp() {
     </div>
   );
 
-  const mainScreens = ["dashboard","entry","pnl","history","stock","settings","detail"];
+  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","monthly"];
 
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost}/>}
-        {screen==="entry"     && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)}/>}
-        {screen==="stock"     && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
-        {screen==="pnl"       && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
-        {screen==="history"   && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
-        {screen==="detail"    && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
-        {screen==="settings"  && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser}/></Gate>}
+        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost}/>}
+        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)}/>}
+        {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
+        {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
+        {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey}/></Gate>}
+        {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
+        {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
+        {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
+        {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
+        {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser}/></Gate>}
       </div>
-      {mainScreens.includes(screen) && <BottomNav active={screen} onChange={setScreen} role={role}/>}
+      {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen} onChange={setScreen} role={role}/>}
     </Shell>
   );
 }
