@@ -2948,15 +2948,41 @@ export default function GasLedgerApp() {
 
   const globalCSS = `
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body, #root { height: 100%; }
-    body { font-family: ${F}; background: ${T.bg}; -webkit-font-smoothing: antialiased; }
+    html { height: 100%; height: -webkit-fill-available; }
+    body {
+      font-family: ${F};
+      background: ${T.bg};
+      -webkit-font-smoothing: antialiased;
+      -webkit-text-size-adjust: 100%;
+      height: 100%;
+      height: -webkit-fill-available;
+      overflow: hidden;
+    }
+    #root {
+      height: 100%;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
     input, textarea, button, select { font-family: inherit; }
-    textarea { resize: none; }
-    ::-webkit-scrollbar { width: 0; }
+    input, select { font-size: 16px; }
+    textarea { resize: none; font-size: 16px; }
+    ::-webkit-scrollbar { display: none; }
+    * { -webkit-tap-highlight-color: transparent; }
   `;
 
   const Shell = ({children}) => (
-    <div style={{height:"100%",display:"flex",flexDirection:"column",background:T.bg,maxWidth:430,margin:"0 auto",position:"relative",overflow:"hidden"}}>
+    <div style={{
+      height:"100%",
+      display:"flex",
+      flexDirection:"column",
+      background:T.bg,
+      width:"100%",
+      maxWidth:480,
+      margin:"0 auto",
+      position:"relative",
+      overflow:"hidden",
+    }}>
       <style>{globalCSS}</style>
       {children}
     </div>
