@@ -1298,12 +1298,10 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
   };
 
   const PRESETS = [
-    { id:"today",     label:"Today",       from:todayISO(),  to:todayISO()  },
-    { id:"thisweek",  label:"This week",   from:daysAgo(6),  to:todayISO()  },
-    { id:"thismonth", label:"This month",  from:monthStart(0),to:todayISO() },
-    { id:"last7",     label:"Last 7 days", from:daysAgo(6),  to:todayISO()  },
-    { id:"last30",    label:"Last 30 days",from:daysAgo(29), to:todayISO()  },
-    { id:"lastmonth", label:"Last month",  from:monthStart(-1),to:monthEnd(-1) },
+    { id:"today",     label:"Today",      from:todayISO(),    to:todayISO()    },
+    { id:"thisweek",  label:"This week",  from:daysAgo(6),    to:todayISO()    },
+    { id:"thismonth", label:"This month", from:monthStart(0), to:todayISO()    },
+    { id:"lastmonth", label:"Last month", from:monthStart(-1),to:monthEnd(-1)  },
   ];
 
   // If opened from Monthly screen, pre-select that month
