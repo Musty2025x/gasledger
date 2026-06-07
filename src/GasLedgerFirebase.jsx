@@ -35,14 +35,23 @@ const fmt   = (n) => "₦" + Math.round(n).toLocaleString("en-NG");
 const fmtKg = (n) => Math.round(n).toLocaleString("en-NG") + " kg";
 const fmtD  = (d) => new Date(d).toLocaleDateString("en-NG",{weekday:"short",day:"numeric",month:"short"});
 const fmtShort = (d) => new Date(d).toLocaleDateString("en-NG",{day:"numeric",month:"short"});
-const GAS_PRICE = 320;
+// Default fallback price — overridden by live Price History in all screens
+const DEFAULT_SELL_PRICE = 320;
+const DEFAULT_COST_PRICE = 0;
 
-const calcEntry = (e) => {
-  const gas  = (e.closeMeter||0) - (e.openMeter||0);
-  const sales = (e.cashSales||0) + (e.posSales||0);
-  const exp   = (e.expenses||[]).reduce((s,x)=>s+x.amt,0);
-  const expRev = gas * GAS_PRICE;
-  return { gas, sales, exp, expRev, variance: sales-expRev, profit: sales-exp };
+// calcEntry now accepts optional selling and cost prices
+// sellingPrice — used for expected revenue and variance (what you charge customers)
+// costPrice    — used for COGS (what you paid the supplier per kg)
+const calcEntry = (e, sellingPrice = DEFAULT_SELL_PRICE, costPrice = DEFAULT_COST_PRICE) => {
+  const gas     = (e.closeMeter||0) - (e.openMeter||0);
+  const sales   = (e.cashSales||0) + (e.posSales||0);
+  const exp     = (e.expenses||[]).reduce((s,x)=>s+x.amt, 0);
+  const expRev  = gas * sellingPrice;          // expected revenue at selling price
+  const cogs    = gas * costPrice;             // cost of goods sold
+  const grossP  = sales - cogs;               // gross profit (before operating expenses)
+  const netP    = grossP - exp;               // net profit (after expenses)
+  const variance= sales - expRev;             // cash variance (meter vs collected)
+  return { gas, sales, exp, expRev, cogs, grossProfit: grossP, profit: netP, variance };
 };
 
 const buildStockPeriods = (entries, deliveries) => {
@@ -66,8 +75,18 @@ const buildStockPeriods = (entries, deliveries) => {
   return { periods:[...periods].reverse(), current:{...cur, pct} };
 };
 
+// Current selling price from most recent Price History record
 const latestPrice = (prices) =>
-  prices.length ? [...prices].sort((a,b)=>new Date(b.date)-new Date(a.date))[0].pricePerKg : GAS_PRICE;
+  prices.length
+    ? [...prices].sort((a,b)=>new Date(b.date)-new Date(a.date))[0].pricePerKg
+    : DEFAULT_SELL_PRICE;
+
+// Current cost price from most recent delivery purchase price
+const latestCostPrice = (deliveries) => {
+  const withPrice = deliveries.filter(d => d.pricePerKg > 0);
+  if (!withPrice.length) return DEFAULT_COST_PRICE;
+  return [...withPrice].sort((a,b)=>new Date(b.date)-new Date(a.date))[0].pricePerKg;
+};
 
 // ── SVG Icon set (no emoji, no external font) ────────────────
 const Icon = ({ n, s=20, c="currentColor" }) => {
@@ -618,7 +637,7 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail}) => {
 // DAILY ENTRY
 // ═══════════════════════════════════════════════════════════════
 const DailyEntry = ({back, onSave, lastEntry, pricePerKg}) => {
-  const GP  = pricePerKg || GAS_PRICE;
+  const GP  = pricePerKg || DEFAULT_SELL_PRICE;
   const now = new Date().toISOString().split("T")[0];
   const [date,  setDate]  = useState(now);
   const [open,  setOpen]  = useState(String(lastEntry?.closeMeter||""));
@@ -923,7 +942,9 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, back}) => {
 // ═══════════════════════════════════════════════════════════════
 // P&L REPORT
 // ═══════════════════════════════════════════════════════════════
-const PnLScreen = ({entries, back}) => {
+const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
+  const SP = sellPrice || DEFAULT_SELL_PRICE;
+  const CP = costPrice || DEFAULT_COST_PRICE;
   // ── date helpers ─────────────────────────────────────────
   const todayISO  = () => new Date().toISOString().split("T")[0];
   const daysAgo   = (n) => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split("T")[0]; };
@@ -976,14 +997,24 @@ const PnLScreen = ({entries, back}) => {
   const days     = filtered.length;
 
   const totals = filtered.reduce((a,e)=>{
-    const c=calcEntry(e);
-    return {rev:a.rev+c.sales,gas:a.gas+c.gas,exp:a.exp+c.exp,
-            profit:a.profit+c.profit,cash:a.cash+e.cashSales,
-            pos:a.pos+e.posSales,variance:a.variance+c.variance};
-  },{rev:0,gas:0,exp:0,profit:0,cash:0,pos:0,variance:0});
+    const c=calcEntry(e, SP, CP);
+    return {
+      rev:       a.rev       + c.sales,
+      gas:       a.gas       + c.gas,
+      exp:       a.exp       + c.exp,
+      profit:    a.profit    + c.profit,
+      grossP:    a.grossP    + c.grossProfit,
+      cogs:      a.cogs      + c.cogs,
+      cash:      a.cash      + e.cashSales,
+      pos:       a.pos       + e.posSales,
+      variance:  a.variance  + c.variance,
+      expRev:    a.expRev    + c.expRev,
+    };
+  },{rev:0,gas:0,exp:0,profit:0,grossP:0,cogs:0,cash:0,pos:0,variance:0,expRev:0});
 
-  const margin = totals.rev>0 ? Math.round((totals.profit/totals.rev)*100) : 0;
-  const avgDaily= days>0 ? totals.rev/days : 0;
+  const margin      = totals.rev>0  ? Math.round((totals.profit/totals.rev)*100)  : 0;
+  const grossMargin = totals.rev>0  ? Math.round((totals.grossP/totals.rev)*100)  : 0;
+  const avgDaily    = days>0        ? totals.rev/days : 0;
 
   const expBd = {};
   filtered.forEach(e=>(e.expenses||[]).forEach(x=>{expBd[x.cat]=(expBd[x.cat]||0)+x.amt;}));
@@ -1050,17 +1081,18 @@ const PnLScreen = ({entries, back}) => {
           {/* KPI grid */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
             {[
-              {l:"Revenue",   v:fmt(totals.rev),    color:T.gold,    bg:T.primary},
-              {l:"Net profit",v:fmt(totals.profit),  color:totals.profit>=0?T.success:T.danger, bg:T.surface},
-              {l:"Expenses",  v:fmt(totals.exp),     color:T.text,    bg:T.surface},
-              {l:"Gas sold",  v:fmtKg(totals.gas),  color:T.text,    bg:T.surface},
-              {l:"Cash",      v:fmt(totals.cash),    color:T.text,    bg:T.surface},
-              {l:"POS / transfer",v:fmt(totals.pos), color:T.text,    bg:T.surface},
+              {l:"Revenue",      v:fmt(totals.rev),    color:T.gold,   bg:T.primary},
+              {l:"Gross profit", v:fmt(totals.grossP), color:totals.grossP>=0?T.success:T.danger, bg:T.surface},
+              {l:"Net profit",   v:fmt(totals.profit), color:totals.profit>=0?T.success:T.danger, bg:T.surface},
+              {l:"Expenses",     v:fmt(totals.exp),    color:T.text,   bg:T.surface},
+              {l:"Cash",         v:fmt(totals.cash),   color:T.text,   bg:T.surface},
+              {l:"POS / transfer",v:fmt(totals.pos),   color:T.text,   bg:T.surface},
             ].map(({l,v,color,bg})=>(
               <div key={l} style={{background:bg,borderRadius:R.lg,border:`1px solid ${bg===T.primary?"transparent":T.border}`,padding:"11px 13px"}}>
                 <div style={{fontSize:11,color:bg===T.primary?"rgba(255,255,255,.5)":T.muted,fontFamily:F,fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{l}</div>
                 <div style={{fontSize:16,fontWeight:700,color,fontFamily:F}}>{v}</div>
-                {l==="Net profit"&&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{margin}% margin</div>}
+                {l==="Gross profit"&&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{grossMargin}% gross margin</div>}
+                {l==="Net profit"  &&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{margin}% net margin</div>}
               </div>
             ))}
           </div>
@@ -1068,29 +1100,44 @@ const PnLScreen = ({entries, back}) => {
           {/* Income statement */}
           <SLabel>Income statement</SLabel>
           <Card style={{marginBottom:16}}>
-            <Row label="Cash sales"      value={fmt(totals.cash)}   indent credit={true}/>
-            <Row label="POS / transfer"  value={fmt(totals.pos)}    indent credit={true}/>
-            <Row label="Gross revenue"   value={fmt(totals.rev)}    bold   credit={true}/>
+            <Row label="Cash sales"          value={fmt(totals.cash)}   indent credit={true}/>
+            <Row label="POS / transfer"       value={fmt(totals.pos)}    indent credit={true}/>
+            <Row label="Gross revenue"        value={fmt(totals.rev)}    bold   credit={true}/>
+            {CP > 0 && <>
+              <div style={{padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`}}>
+                <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,fontFamily:F}}>Cost of goods sold</span>
+              </div>
+              <Row label={`Supplier cost (${fmtKg(totals.gas)} × ₦${CP}/kg)`} value={fmt(totals.cogs)} indent credit={false}/>
+              <Row label="Gross profit" value={fmt(totals.grossP)} bold credit={totals.grossP>=0}/>
+            </>}
             <div style={{padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`}}>
-              <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,fontFamily:F}}>Expenses</span>
+              <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,fontFamily:F}}>Operating expenses</span>
             </div>
             {expList.map(([cat,amt])=><Row key={cat} label={cat} value={fmt(amt)} indent credit={false}/>)}
             {expList.length===0&&<Row label="No expenses recorded" value="—" indent/>}
-            <Row label="Total expenses"  value={fmt(totals.exp)}  bold credit={false}/>
+            <Row label="Total expenses"       value={fmt(totals.exp)}  bold credit={false}/>
             <div style={{padding:"12px 14px",background:totals.profit>=0?`${T.success}10`:`${T.danger}10`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:14,fontWeight:600,color:T.text,fontFamily:F}}>Net profit</span>
                 <span style={{fontSize:18,fontWeight:700,color:totals.profit>=0?T.success:T.danger,fontFamily:F}}>{fmt(totals.profit)}</span>
               </div>
+              {CP > 0 && (
+                <div style={{fontSize:11,color:T.muted,marginTop:4,fontFamily:F}}>
+                  ₦{CP}/kg cost · ₦{SP}/kg sold · ₦{SP-CP}/kg margin
+                </div>
+              )}
             </div>
           </Card>
 
           {/* Variance check */}
-          <SLabel>Variance check</SLabel>
+          <SLabel>Cash variance check</SLabel>
           <Card pad="14px" style={{marginBottom:16}}>
+            <div style={{background:T.bg,borderRadius:R.sm,padding:"8px 10px",marginBottom:10,fontSize:11,color:T.muted,fontFamily:F,lineHeight:1.5}}>
+              Compares what the meter says you dispensed (at your selling price) vs what was actually collected in cash and POS. A shortfall means gas left the plant without full payment.
+            </div>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{fontSize:12,color:T.muted}}>Expected ({fmtKg(totals.gas)} × ₦{GAS_PRICE})</span>
-              <span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmt(totals.gas*GAS_PRICE)}</span>
+              <span style={{fontSize:12,color:T.muted}}>Expected ({fmtKg(totals.gas)} × ₦{SP}/kg)</span>
+              <span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmt(totals.expRev)}</span>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
               <span style={{fontSize:12,color:T.muted}}>Actual collected</span>
@@ -1103,8 +1150,9 @@ const PnLScreen = ({entries, back}) => {
                 {totals.variance>=0?"+":"-"}{fmt(Math.abs(totals.variance))}
               </span>
             </div>
-            <div style={{marginTop:8,fontSize:11,color:T.muted,fontFamily:F}}>
-              {Math.abs(totals.variance/(totals.gas*GAS_PRICE||1)*100).toFixed(1)}% {totals.variance>=0?"surplus":"shortfall"} vs expected.
+            <div style={{marginTop:6,fontSize:11,color:totals.variance>=0?T.success:T.danger,fontFamily:F,fontWeight:600}}>
+              {totals.expRev>0 ? Math.abs(totals.variance/totals.expRev*100).toFixed(1) : "0"}%
+              {" "}{totals.variance>=0 ? "surplus — collected more than expected" : "shortfall — investigate missing payment"}
             </div>
           </Card>
 
@@ -1224,8 +1272,8 @@ const HistoryScreen = ({entries, back, goDayDetail}) => (
 // ═══════════════════════════════════════════════════════════════
 // DAY DETAIL
 // ═══════════════════════════════════════════════════════════════
-const DayDetail = ({entry, back}) => {
-  const c = calcEntry(entry);
+const DayDetail = ({entry, back, sellPrice, costPrice}) => {
+  const c = calcEntry(entry, sellPrice||DEFAULT_SELL_PRICE, costPrice||DEFAULT_COST_PRICE);
   const Row = ({l,v,accent}) => (
     <div style={{display:"flex",justifyContent:"space-between",padding:"11px 14px",borderBottom:`1px solid ${T.border}`}}>
       <span style={{fontSize:13,color:T.muted,fontFamily:F}}>{l}</span>
@@ -1254,9 +1302,11 @@ const DayDetail = ({entry, back}) => {
         <Card style={{marginBottom:12}}>
           <Row l="Cash"         v={fmt(entry.cashSales)}/>
           <Row l="POS/transfer" v={fmt(entry.posSales)}/>
-          <Row l="Total"        v={fmt(c.sales)} accent={T.primary}/>
+          <Row l="Total"        v={fmt(c.sales)}   accent={T.primary}/>
           <Row l="Expected"     v={fmt(c.expRev)}/>
           <Row l="Variance"     v={(c.variance>=0?"+":"")+fmt(c.variance)} accent={c.variance>=0?T.success:T.danger}/>
+          {costPrice>0&&<Row l={`Cost of goods (₦${costPrice}/kg)`} v={fmt(c.cogs)} accent={T.danger}/>}
+          {costPrice>0&&<Row l="Gross profit" v={fmt(c.grossProfit)} accent={c.grossProfit>=0?T.success:T.danger}/>}
         </Card>
         {(entry.expenses||[]).length>0&&(<>
           <SLabel>Expenses</SLabel>
@@ -1703,6 +1753,7 @@ export default function GasLedgerApp() {
 
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
+  const liveCost  = latestCostPrice(deliveries);
 
   const addEntry    = useCallback(e => fbAddEntry(plantId,e),    [plantId]);
   const addDelivery = useCallback(d => fbAddDelivery(plantId,d), [plantId]);
@@ -1787,9 +1838,9 @@ export default function GasLedgerApp() {
         {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail}/>}
         {screen==="entry"     && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice}/>}
         {screen==="stock"     && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} back={()=>setScreen("dashboard")}/></Gate>}
-        {screen==="pnl"       && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")}/></Gate>}
+        {screen==="pnl"       && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
         {screen==="history"   && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail}/>}
-        {screen==="detail"    && detail && <DayDetail entry={detail} back={()=>setScreen("history")}/>}
+        {screen==="detail"    && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="settings"  && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser}/></Gate>}
       </div>
       {mainScreens.includes(screen) && <BottomNav active={screen} onChange={setScreen} role={role}/>}
