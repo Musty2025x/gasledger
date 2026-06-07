@@ -158,6 +158,14 @@ export const addEntry = async (plantId, entry) => {
 export const deleteEntry = (plantId, entryId) =>
   deleteDoc(doc(db, "plants", plantId, "entries", entryId));
 
+export const updateEntry = (plantId, entryId, data) => {
+  const { id: _ignore, createdAt: _ca, ...rest } = data;
+  return updateDoc(doc(db, "plants", plantId, "entries", entryId), {
+    ...rest,
+    updatedAt: serverTimestamp(),
+  });
+};
+
 // --- Deliveries ---
 export const addDelivery = async (plantId, delivery) => {
   const { id: _ignore, ...data } = delivery;
@@ -169,6 +177,14 @@ export const addDelivery = async (plantId, delivery) => {
 
 export const deleteDelivery = (plantId, deliveryId) =>
   deleteDoc(doc(db, "plants", plantId, "deliveries", deliveryId));
+
+export const updateDelivery = (plantId, deliveryId, data) => {
+  const { id: _ignore, createdAt: _ca, ...rest } = data;
+  return updateDoc(doc(db, "plants", plantId, "deliveries", deliveryId), {
+    ...rest,
+    updatedAt: serverTimestamp(),
+  });
+};
 
 // --- Prices ---
 export const addPrice = async (plantId, price) => {

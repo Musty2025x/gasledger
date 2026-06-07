@@ -11,6 +11,10 @@ import {
   addEntry    as fbAddEntry,
   addDelivery as fbAddDelivery,
   addPrice    as fbAddPrice,
+  updateEntry    as fbUpdateEntry,
+  updateDelivery as fbUpdateDelivery,
+  deleteEntry    as fbDeleteEntry,
+  deleteDelivery as fbDeleteDelivery,
   createPlant, createInvite, acceptInvite,
   getPendingInvite, deleteInvite, revokeStaff,
   loginUser, registerUser, resetPassword, signOutUser,
@@ -751,10 +755,11 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg}) => {
 // ═══════════════════════════════════════════════════════════════
 // STOCK & REFILL
 // ═══════════════════════════════════════════════════════════════
-const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, back}) => {
+const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery, onDeleteDelivery, back}) => {
   const [tab,       setTab]       = useState("deliveries");
   const [showDel,   setShowDel]   = useState(false);
   const [showPx,    setShowPx]    = useState(false);
+  const [editDel,   setEditDel]   = useState(null); // delivery being edited
   const [ld,        setLd]        = useState(false);
   const [delKg,     setDelKg]     = useState("");
   const [delDate,   setDelDate]   = useState(new Date().toISOString().split("T")[0]);
@@ -765,18 +770,56 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, back}) => {
   const [pxPrice,   setPxPrice]   = useState("");
   const [pxNote,    setPxNote]    = useState("");
 
+  // edit delivery state
+  const [editKg,    setEditKg]    = useState("");
+  const [editDate,  setEditDate]  = useState("");
+  const [editSup,   setEditSup]   = useState("");
+  const [editPx,    setEditPx]    = useState("");
+  const [editNote,  setEditNote]  = useState("");
+
   const cur = stock.current;
   const lp  = prices.length ? [...prices].sort((a,b)=>new Date(b.date)-new Date(a.date))[0] : null;
 
   const saveDel = async () => {
     if(!delKg||!delSup) return; setLd(true);
-    try { await onAddDelivery({date:delDate,kg:Number(delKg),supplier:delSup,pricePerKg:Number(delPx)||0,note:delNote}); setShowDel(false); setDelKg(""); setDelSup(""); setDelPx(""); setDelNote(""); }
+    try {
+      await onAddDelivery({date:delDate,kg:Number(delKg),supplier:delSup,pricePerKg:Number(delPx)||0,note:delNote});
+      setShowDel(false); setDelKg(""); setDelSup(""); setDelPx(""); setDelNote("");
+    } finally { setLd(false); }
+  };
+
+  const saveEditDel = async () => {
+    if(!editKg||!editSup) return; setLd(true);
+    try {
+      await onUpdateDelivery(editDel.id, {
+        date:editDate, kg:Number(editKg),
+        supplier:editSup, pricePerKg:Number(editPx)||0, note:editNote,
+      });
+      setEditDel(null);
+    } finally { setLd(false); }
+  };
+
+  const handleDeleteDelivery = async (del) => {
+    if (!window.confirm(`Delete delivery of ${del.kg} kg from ${del.supplier}? This cannot be undone.`)) return;
+    setLd(true);
+    try { await onDeleteDelivery(del.id); }
+    catch(e) { alert(e.message); }
     finally { setLd(false); }
   };
+
   const savePx = async () => {
     if(!pxPrice) return; setLd(true);
     try { await onAddPrice({date:pxDate,pricePerKg:Number(pxPrice),note:pxNote}); setShowPx(false); setPxPrice(""); setPxNote(""); }
     finally { setLd(false); }
+  };
+
+  const openEditDel = (del) => {
+    setEditDel(del);
+    setEditKg(String(del.kg));
+    setEditDate(del.date);
+    setEditSup(del.supplier||"");
+    setEditPx(String(del.pricePerKg||""));
+    setEditNote(del.note||"");
   };
 
   const Modal = ({title, onClose, children}) => (
@@ -853,7 +896,7 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, back}) => {
             return (
               <Card key={i} style={{marginBottom:8}}>
                 <div style={{padding:"11px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div>
+                  <div style={{flex:1}}>
                     <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
                       <span style={{fontSize:13,fontWeight:600,color:T.text}}>{fmtD(p.delivery.date)}</span>
                       <Badge label={i===0?"Active":"Closed"} variant={i===0?"success":"default"}/>
@@ -871,6 +914,17 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, back}) => {
                   <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderTop:`1px solid ${T.border}`,marginTop:4}}>
                     <span style={{fontSize:12,fontWeight:600,color:T.text}}>{i===0?"Remaining now":"Carried forward"}</span>
                     <span style={{fontSize:13,fontWeight:700,color:i===0?(pct<15?T.danger:pct<40?T.warning:T.success):T.muted}}>{fmtKg(p.remaining)}</span>
+                  </div>
+                  {/* Edit / Delete buttons */}
+                  <div style={{display:"flex",gap:8,marginTop:10,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
+                    <button onClick={()=>openEditDel(p.delivery)}
+                      style={{flex:1,padding:"7px",background:`${T.primary}10`,border:`1px solid ${T.primary}20`,borderRadius:R.sm,fontSize:12,fontWeight:600,color:T.primary,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                      <Icon n="lock" s={13} c={T.primary}/> Edit
+                    </button>
+                    <button onClick={()=>handleDeleteDelivery(p.delivery)}
+                      style={{flex:1,padding:"7px",background:`${T.danger}10`,border:`1px solid ${T.danger}20`,borderRadius:R.sm,fontSize:12,fontWeight:600,color:T.danger,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                      <Icon n="close" s={13} c={T.danger}/> Delete
+                    </button>
                   </div>
                 </div>
               </Card>
@@ -925,6 +979,23 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, back}) => {
           <Input label="Purchase price per kg" value={delPx} onChange={setDelPx} type="number" prefix="₦" placeholder="e.g. 310" hint="Optional — for margin tracking"/>
           <Input label="Note" value={delNote} onChange={setDelNote} placeholder="e.g. Morning truck"/>
           <Btn label="Save delivery" onClick={saveDel} loading={ld} disabled={!delKg||!delSup} size="lg" icon="check"/>
+        </Modal>
+      )}
+
+      {editDel&&(
+        <Modal title="Edit delivery" onClose={()=>setEditDel(null)}>
+          <div style={{background:`${T.warning}12`,borderRadius:R.md,padding:"9px 12px",marginBottom:14,fontSize:12,color:T.warning,fontFamily:F}}>
+            Editing this delivery will recalculate all stock periods and carry-forwards automatically.
+          </div>
+          <Input label="Date" value={editDate} onChange={setEditDate} type="date"/>
+          <Input label="Quantity (kg)" value={editKg} onChange={setEditKg} type="number" placeholder="e.g. 1200"/>
+          <Input label="Supplier" value={editSup} onChange={setEditSup} placeholder="e.g. Ardova Plc"/>
+          <Input label="Purchase price per kg" value={editPx} onChange={setEditPx} type="number" prefix="₦" placeholder="e.g. 1600" hint="Used for COGS calculation in P&L"/>
+          <Input label="Note" value={editNote} onChange={setEditNote} placeholder="e.g. Morning truck"/>
+          <Btn label="Save changes" onClick={saveEditDel} loading={ld} disabled={!editKg||!editSup} size="lg" icon="check"/>
+          <div style={{marginTop:8}}>
+            <Btn label="Delete this delivery" onClick={()=>{ setEditDel(null); handleDeleteDelivery(editDel); }} variant="danger" size="lg"/>
+          </div>
         </Modal>
       )}
       {showPx&&(
@@ -1272,58 +1343,215 @@ const HistoryScreen = ({entries, back, goDayDetail}) => (
 // ═══════════════════════════════════════════════════════════════
 // DAY DETAIL
 // ═══════════════════════════════════════════════════════════════
-const DayDetail = ({entry, back, sellPrice, costPrice}) => {
-  const c = calcEntry(entry, sellPrice||DEFAULT_SELL_PRICE, costPrice||DEFAULT_COST_PRICE);
-  const Row = ({l,v,accent}) => (
+const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwner}) => {
+  const SP = sellPrice || DEFAULT_SELL_PRICE;
+  const CP = costPrice || DEFAULT_COST_PRICE;
+
+  const [mode,    setMode]    = useState("view"); // view | edit
+  const [saving,  setSaving]  = useState(false);
+  const [deleting,setDeleting]= useState(false);
+  const [err,     setErr]     = useState("");
+  const [ok,      setOk]      = useState("");
+
+  // editable fields
+  const [date,     setDate]     = useState(entry.date);
+  const [openM,    setOpenM]    = useState(String(entry.openMeter));
+  const [closeM,   setCloseM]   = useState(String(entry.closeMeter));
+  const [cash,     setCash]     = useState(String(entry.cashSales));
+  const [pos,      setPos]      = useState(String(entry.posSales));
+  const [exps,     setExps]     = useState(entry.expenses?.length ? entry.expenses.map(x=>({...x,amt:String(x.amt)})) : [{cat:"",amt:""}]);
+  const [notes,    setNotes]    = useState(entry.notes||"");
+
+  const setE = (i,k,v) => setExps(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
+
+  // live calc from edited values
+  const gas      = (Number(closeM)||0) - (Number(openM)||0);
+  const sales    = (Number(cash)||0)   + (Number(pos)||0);
+  const expTotal = exps.reduce((s,x)=>s+(Number(x.amt)||0),0);
+  const expRev   = gas * SP;
+  const variance = sales - expRev;
+  const cogs     = gas * CP;
+  const grossP   = sales - cogs;
+  const netP     = grossP - expTotal;
+
+  const saveEdit = async () => {
+    if (Number(closeM) <= Number(openM)) { setErr("Closing meter must be greater than opening meter."); return; }
+    setSaving(true); setErr(""); setOk("");
+    try {
+      await onUpdate(entry.id, {
+        date, openMeter:Number(openM), closeMeter:Number(closeM),
+        cashSales:Number(cash)||0, posSales:Number(pos)||0,
+        expenses: exps.filter(x=>x.cat&&x.amt).map(x=>({cat:x.cat,amt:Number(x.amt)})),
+        notes,
+      });
+      setOk("Entry updated successfully.");
+      setMode("view");
+    } catch(e) { setErr(e.message||"Update failed. Try again."); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this entry? This cannot be undone.")) return;
+    setDeleting(true);
+    try { await onDelete(entry.id); back(); }
+    catch(e) { setErr(e.message||"Delete failed."); setDeleting(false); }
+  };
+
+  const c = calcEntry(entry, SP, CP); // original values for view mode
+
+  const StatTile = ({label, value, color}) => (
+    <div style={{background:T.surface,borderRadius:R.lg,border:`1px solid ${T.border}`,padding:"12px 14px"}}>
+      <div style={{fontSize:11,color:T.muted,fontFamily:F,fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>{label}</div>
+      <div style={{fontSize:18,fontWeight:700,color:color||T.text,fontFamily:F}}>{value}</div>
+    </div>
+  );
+
+  const ViewRow = ({l,v,accent}) => (
     <div style={{display:"flex",justifyContent:"space-between",padding:"11px 14px",borderBottom:`1px solid ${T.border}`}}>
       <span style={{fontSize:13,color:T.muted,fontFamily:F}}>{l}</span>
       <span style={{fontSize:13,fontWeight:600,color:accent||T.text,fontFamily:F}}>{v}</span>
     </div>
   );
+
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
-      <TopBar title={fmtD(entry.date)} left={<BackBtn onClick={back}/>}/>
+      <TopBar
+        title={fmtD(entry.date)}
+        dark={false}
+        left={<BackBtn onClick={back} dark={false}/>}
+        right={isOwner && mode==="view" ? (
+          <button onClick={()=>{ setMode("edit"); setErr(""); setOk(""); }}
+            style={{background:T.primary,border:"none",borderRadius:R.md,padding:"6px 12px",cursor:"pointer",color:"#fff",fontSize:13,fontWeight:600,fontFamily:F}}>
+            Edit
+          </button>
+        ) : isOwner && mode==="edit" ? (
+          <button onClick={()=>setMode("view")}
+            style={{background:T.bg2,border:"none",borderRadius:R.md,padding:"6px 12px",cursor:"pointer",color:T.muted,fontSize:13,fontWeight:600,fontFamily:F}}>
+            Cancel
+          </button>
+        ) : null}
+      />
+
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 24px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-          {[[fmt(c.sales),"Total sales",false],[fmt(c.profit),"Net profit",c.profit>=0]].map(([v,l,pos])=>(
-            <div key={l} style={{background:T.surface,borderRadius:R.lg,border:`1px solid ${T.border}`,padding:"12px 14px"}}>
-              <div style={{fontSize:11,color:T.muted,fontFamily:F,fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>{l}</div>
-              <div style={{fontSize:18,fontWeight:700,color:pos?T.success:l==="Net profit"?T.danger:T.text,fontFamily:F}}>{v}</div>
-            </div>
-          ))}
-        </div>
-        <SLabel mt={0}>Meter</SLabel>
-        <Card style={{marginBottom:12}}>
-          <Row l="Opening meter" v={`${entry.openMeter.toLocaleString()} kg`}/>
-          <Row l="Closing meter" v={`${entry.closeMeter.toLocaleString()} kg`}/>
-          <Row l="Gas dispensed" v={fmtKg(c.gas)} accent={T.primary}/>
-        </Card>
-        <SLabel>Sales</SLabel>
-        <Card style={{marginBottom:12}}>
-          <Row l="Cash"         v={fmt(entry.cashSales)}/>
-          <Row l="POS/transfer" v={fmt(entry.posSales)}/>
-          <Row l="Total"        v={fmt(c.sales)}   accent={T.primary}/>
-          <Row l="Expected"     v={fmt(c.expRev)}/>
-          <Row l="Variance"     v={(c.variance>=0?"+":"")+fmt(c.variance)} accent={c.variance>=0?T.success:T.danger}/>
-          {costPrice>0&&<Row l={`Cost of goods (₦${costPrice}/kg)`} v={fmt(c.cogs)} accent={T.danger}/>}
-          {costPrice>0&&<Row l="Gross profit" v={fmt(c.grossProfit)} accent={c.grossProfit>=0?T.success:T.danger}/>}
-        </Card>
-        {(entry.expenses||[]).length>0&&(<>
-          <SLabel>Expenses</SLabel>
+        {/* Status messages */}
+        {ok  && <div style={{background:`${T.success}12`,borderRadius:R.md,padding:"10px 14px",marginBottom:12,fontSize:13,color:T.success,fontFamily:F}}>{ok}</div>}
+        {err && <div style={{background:`${T.danger}12`, borderRadius:R.md,padding:"10px 14px",marginBottom:12,fontSize:13,color:T.danger, fontFamily:F}}>{err}</div>}
+
+        {/* ── VIEW MODE ── */}
+        {mode==="view" && (<>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+            <StatTile label="Total sales"  value={fmt(c.sales)}  color={T.text}/>
+            <StatTile label="Gross profit" value={fmt(c.grossProfit)} color={c.grossProfit>=0?T.success:T.danger}/>
+            <StatTile label="Net profit"   value={fmt(c.profit)} color={c.profit>=0?T.success:T.danger}/>
+            <StatTile label="Variance"     value={(c.variance>=0?"+":"")+fmt(c.variance)} color={c.variance>=0?T.success:T.danger}/>
+          </div>
+          <SLabel mt={0}>Meter</SLabel>
           <Card style={{marginBottom:12}}>
-            {(entry.expenses||[]).map((x,i)=>(
-              <Row key={i} l={x.cat} v={fmt(x.amt)} accent={T.danger}/>
+            <ViewRow l="Opening meter" v={`${Number(entry.openMeter).toLocaleString()} kg`}/>
+            <ViewRow l="Closing meter" v={`${Number(entry.closeMeter).toLocaleString()} kg`}/>
+            <ViewRow l="Gas dispensed" v={fmtKg(c.gas)} accent={T.primary}/>
+          </Card>
+          <SLabel>Sales</SLabel>
+          <Card style={{marginBottom:12}}>
+            <ViewRow l="Cash"          v={fmt(entry.cashSales)}/>
+            <ViewRow l="POS / transfer" v={fmt(entry.posSales)}/>
+            <ViewRow l="Total"         v={fmt(c.sales)}        accent={T.primary}/>
+            <ViewRow l="Expected"      v={fmt(c.expRev)}/>
+            <ViewRow l="Variance"      v={(c.variance>=0?"+":"")+fmt(c.variance)} accent={c.variance>=0?T.success:T.danger}/>
+            {CP>0&&<ViewRow l={`COGS (₦${CP}/kg)`}   v={fmt(c.cogs)}        accent={T.danger}/>}
+            {CP>0&&<ViewRow l="Gross profit"           v={fmt(c.grossProfit)} accent={c.grossProfit>=0?T.success:T.danger}/>}
+          </Card>
+          {(entry.expenses||[]).length>0&&(<>
+            <SLabel>Expenses</SLabel>
+            <Card style={{marginBottom:12}}>
+              {(entry.expenses||[]).map((x,i)=><ViewRow key={i} l={x.cat} v={fmt(x.amt)} accent={T.danger}/>)}
+              <ViewRow l="Total" v={fmt(c.exp)} accent={T.danger}/>
+            </Card>
+          </>)}
+          {entry.notes&&(<>
+            <SLabel>Notes</SLabel>
+            <Card pad="12px 14px" style={{marginBottom:12}}>
+              <p style={{fontSize:13,color:T.text,lineHeight:1.6,margin:0}}>{entry.notes}</p>
+            </Card>
+          </>)}
+          {/* Owner actions */}
+          {isOwner&&(
+            <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:8}}>
+              <Btn label="Edit this entry" onClick={()=>{setMode("edit");setErr("");setOk("");}} size="lg" icon="lock"/>
+              <Btn label="Delete entry" onClick={handleDelete} loading={deleting} variant="danger" size="lg"/>
+            </div>
+          )}
+          <div style={{marginTop:8}}><Btn label="Back to history" onClick={back} variant="outline" size="lg"/></div>
+        </>)}
+
+        {/* ── EDIT MODE ── */}
+        {mode==="edit" && (<>
+          {/* Live preview bar */}
+          {(gas>0||sales>0)&&(
+            <div style={{background:T.primary,borderRadius:R.md,padding:"10px 14px",marginBottom:16,display:"flex",gap:8}}>
+              {[[fmtKg(gas),"Gas"],[fmt(sales),"Sales"],[(variance>=0?"+":"")+fmt(variance),"Variance"],[fmt(grossP),"Gross P"]].map(([v,l])=>(
+                <div key={l} style={{flex:1,textAlign:"center"}}>
+                  <div style={{fontSize:12,fontWeight:600,color:"#fff",fontFamily:F}}>{v}</div>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,.45)",textTransform:"uppercase",letterSpacing:.3,marginTop:1}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <SLabel mt={0}>Date</SLabel>
+          <Input value={date} onChange={setDate} type="date"/>
+
+          <SLabel>Meter readings</SLabel>
+          <Card pad="14px" style={{marginBottom:12}}>
+            <Input label="Opening meter (kg)" value={openM} onChange={setOpenM} type="number" placeholder="e.g. 31400"/>
+            <Input label="Closing meter (kg)" value={closeM} onChange={setCloseM} type="number" placeholder="e.g. 31460"
+              error={closeM&&Number(closeM)<=Number(openM)?"Must be greater than opening meter":""}/>
+            {gas>0&&<div style={{background:T.bg,borderRadius:R.sm,padding:"8px 12px",display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:12,color:T.muted}}>Gas dispensed</span>
+              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{fmtKg(gas)}</span>
+            </div>}
+          </Card>
+
+          <SLabel>Sales</SLabel>
+          <Card pad="14px" style={{marginBottom:12}}>
+            <div style={{background:T.bg,borderRadius:R.sm,padding:"8px 12px",marginBottom:12,display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontSize:12,color:T.muted}}>Selling price</span>
+              <span style={{fontSize:13,fontWeight:600,color:T.text}}>₦{SP}/kg</span>
+            </div>
+            <Input label="Cash sales" value={cash} onChange={setCash} type="number" prefix="₦" placeholder="0"/>
+            <Input label="POS / transfer" value={pos} onChange={setPos} type="number" prefix="₦" placeholder="0"/>
+            {sales>0&&expRev>0&&(
+              <div style={{background:Math.abs(variance/expRev)<.05?`${T.success}10`:`${T.danger}10`,borderRadius:R.sm,padding:"9px 12px",marginBottom:4}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12,color:T.muted}}>Expected</span><span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmt(expRev)}</span></div>
+                <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:12,color:T.muted}}>Variance</span><span style={{fontSize:12,fontWeight:700,color:variance>=0?T.success:T.danger}}>{variance>=0?"+":""}{fmt(variance)}</span></div>
+              </div>
+            )}
+          </Card>
+
+          <SLabel>Expenses</SLabel>
+          <Card pad="14px" style={{marginBottom:12}}>
+            {exps.map((ex,i)=>(
+              <div key={i} style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+                <div style={{flex:2}}><Input label={i===0?"Category":""} value={ex.cat} onChange={v=>setE(i,"cat",v)} placeholder="e.g. Salary"/></div>
+                <div style={{flex:1}}><Input label={i===0?"Amount":""} value={ex.amt} onChange={v=>setE(i,"amt",v)} type="number" prefix="₦" placeholder="0"/></div>
+                {exps.length>1&&<button onClick={()=>setExps(p=>p.filter((_,j)=>j!==i))} style={{marginBottom:14,width:34,height:40,borderRadius:R.sm,background:"#fee2e2",border:"none",cursor:"pointer",color:T.danger,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <Icon n="close" s={14} c={T.danger}/>
+                </button>}
+              </div>
             ))}
-            <Row l="Total expenses" v={fmt(c.exp)} accent={T.danger}/>
+            <button onClick={()=>setExps(p=>[...p,{cat:"",amt:""}])} style={{width:"100%",padding:"9px",background:T.bg,border:`1px dashed ${T.borderMid}`,borderRadius:R.sm,fontSize:13,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:F,marginBottom:4}}>+ Add expense</button>
           </Card>
-        </>)}
-        {entry.notes&&(<>
+
           <SLabel>Notes</SLabel>
-          <Card pad="12px 14px" style={{marginBottom:12}}>
-            <p style={{fontSize:13,color:T.text,fontFamily:F,lineHeight:1.6,margin:0}}>{entry.notes}</p>
+          <Card pad="12px 14px" style={{marginBottom:20}}>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}
+              style={{width:"100%",border:"none",outline:"none",fontSize:13,fontFamily:F,color:T.text,resize:"none",background:"transparent",boxSizing:"border-box"}}
+              placeholder="Any notes…"/>
           </Card>
+
+          <Btn label="Save changes" onClick={saveEdit} loading={saving} disabled={!closeM||!openM||Number(closeM)<=Number(openM)} size="lg" icon="check"/>
+          <div style={{marginTop:8}}><Btn label="Cancel" onClick={()=>setMode("view")} variant="outline" size="lg"/></div>
         </>)}
-        <div style={{marginTop:8}}><Btn label="Back to history" onClick={back} variant="outline" size="lg"/></div>
         <div style={{height:16}}/>
       </div>
     </div>
@@ -1755,10 +1983,14 @@ export default function GasLedgerApp() {
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries);
 
-  const addEntry    = useCallback(e => fbAddEntry(plantId,e),    [plantId]);
-  const addDelivery = useCallback(d => fbAddDelivery(plantId,d), [plantId]);
-  const addPrice    = useCallback(p => fbAddPrice(plantId,p),    [plantId]);
-  const openDetail  = useCallback(e => {setDetail(e);setScreen("detail");}, []);
+  const addEntry      = useCallback(e   => fbAddEntry(plantId,e),         [plantId]);
+  const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
+  const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
+  const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
+  const updateDelivery= useCallback((id,d) => fbUpdateDelivery(plantId,id,d),[plantId]);
+  const deleteEntry   = useCallback(id  => fbDeleteEntry(plantId,id),     [plantId]);
+  const deleteDelivery= useCallback(id  => fbDeleteDelivery(plantId,id),  [plantId]);
+  const openDetail    = useCallback(e   => {setDetail(e);setScreen("detail");}, []);
 
   // After login, check for a pending invite (staff flow)
   useEffect(() => {
@@ -1837,10 +2069,10 @@ export default function GasLedgerApp() {
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail}/>}
         {screen==="entry"     && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice}/>}
-        {screen==="stock"     && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} back={()=>setScreen("dashboard")}/></Gate>}
+        {screen==="stock"     && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"       && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
         {screen==="history"   && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail}/>}
-        {screen==="detail"    && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost}/>}
+        {screen==="detail"    && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
         {screen==="settings"  && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser}/></Gate>}
       </div>
       {mainScreens.includes(screen) && <BottomNav active={screen} onChange={setScreen} role={role}/>}
