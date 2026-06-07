@@ -303,7 +303,7 @@ const AuthScreen = ({onAuthed}) => {
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",background:T.bg,fontFamily:F}}>
       {/* Header */}
-      <div style={{background:T.primary,padding:"48px 24px 32px"}}>
+      <div style={{background:T.primary,paddingTop:"max(48px, env(safe-area-inset-top, 48px))",paddingLeft:"24px",paddingRight:"24px",paddingBottom:"32px"}}>
         <div style={{width:44,height:44,borderRadius:R.lg,background:T.gold,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
           <Icon n="gas" s={24} c={T.goldFg}/>
         </div>
@@ -396,7 +396,7 @@ const InviteAcceptScreen = ({ user, invite, onAccepted }) => {
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",background:T.bg,fontFamily:F}}>
-      <div style={{background:T.primary,padding:"48px 24px 32px"}}>
+      <div style={{background:T.primary,paddingTop:"max(48px, env(safe-area-inset-top, 48px))",paddingLeft:"24px",paddingRight:"24px",paddingBottom:"32px"}}>
         <div style={{width:44,height:44,borderRadius:R.lg,background:T.gold,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
           <Icon n="invite" s={24} c={T.goldFg}/>
         </div>
@@ -455,7 +455,7 @@ const SetupScreen = ({user}) => {
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",background:T.bg,fontFamily:F}}>
-      <div style={{background:T.primary,padding:"48px 24px 32px"}}>
+      <div style={{background:T.primary,paddingTop:"max(48px, env(safe-area-inset-top, 48px))",paddingLeft:"24px",paddingRight:"24px",paddingBottom:"32px"}}>
         <div style={{fontSize:22,fontWeight:700,color:"#fff"}}>Welcome</div>
         <div style={{fontSize:13,color:"rgba(255,255,255,.55)",marginTop:4}}>Set up your gas plant to get started.</div>
       </div>
@@ -505,7 +505,7 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
       {/* Header */}
-      <div style={{background:T.primary,padding:"16px 16px 20px",flexShrink:0}}>
+      <div style={{background:T.primary,padding:"16px 16px 20px",paddingTop:"max(16px, env(safe-area-inset-top))",flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
           <div>
             <div style={{fontSize:12,color:"rgba(255,255,255,.5)",fontFamily:F,marginBottom:2}}>Good day</div>
@@ -2964,6 +2964,8 @@ export default function GasLedgerApp() {
       display: flex;
       flex-direction: column;
     }
+    /* Ensure content never hides behind notch or Dynamic Island */
+    .safe-top { padding-top: env(safe-area-inset-top, 0px); }
     input, textarea, button, select { font-family: inherit; }
     input, select { font-size: 16px; }
     textarea { resize: none; font-size: 16px; }
@@ -2971,50 +2973,22 @@ export default function GasLedgerApp() {
     * { -webkit-tap-highlight-color: transparent; }
   `;
 
-  const Shell = ({children}) => {
-  const [installPrompt, setInstallPrompt] = useState(null);
-  const [showBanner,    setShowBanner]    = useState(false);
-
-   useEffect(() => {
-    window.addEventListener("beforeinstallprompt", (e) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-      setShowBanner(true);
-    });
-  }, []);
-
-  const install = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const result = await installPrompt.userChoice;
-    if (result.outcome === "accepted") setShowBanner(false);
-  };
-
-  return (
-    <div style={{height:"100%",display:"flex",flexDirection:"column",background:T.bg,width:"100%",maxWidth:480,margin:"0 auto",position:"relative",overflow:"hidden"}}>
+  const Shell = ({children}) => (
+    <div style={{
+      height:"100%",
+      display:"flex",
+      flexDirection:"column",
+      background:T.bg,
+      width:"100%",
+      maxWidth:480,
+      margin:"0 auto",
+      position:"relative",
+      overflow:"hidden",
+    }}>
       <style>{globalCSS}</style>
-      {/* Install banner — shows on Android Chrome automatically */}
-      {showBanner && (
-        <div style={{background:T.primary,padding:"10px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0,zIndex:200}}>
-          <div style={{width:36,height:36,borderRadius:10,background:T.gold,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:20}}>
-            <Icon n="gas" s={20} c={T.goldFg}/>
-          </div>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:600,color:"#fff",fontFamily:F}}>Install GasLedger</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Add to home screen for quick access</div>
-          </div>
-          <button onClick={install} style={{background:T.gold,border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,color:T.goldFg,cursor:"pointer",fontFamily:F,flexShrink:0}}>
-            Install
-          </button>
-          <button onClick={()=>setShowBanner(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,.5)",cursor:"pointer",fontSize:18,padding:"0 4px",flexShrink:0}}>
-            ×
-          </button>
-        </div>
-      )}
       {children}
     </div>
   );
-};
 
   // ── Auth loading ──────────────────────────────────────────
   if (authLd || (user && (profLd || !inviteChecked))) return <Shell><Spinner/></Shell>;
