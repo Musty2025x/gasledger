@@ -1460,55 +1460,53 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
       <TopBar title="P&L report" left={<BackBtn onClick={back}/>}/>
 
-      {/* Chips row — presets + Custom + PDF + WA all in one scrollable row */}
+      {/* Row 1 — scrollable date chips only */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"10px 12px",overflowX:"auto",display:"flex",gap:6,flexShrink:0,WebkitOverflowScrolling:"touch",alignItems:"center"}}>
-        {/* Preset date chips */}
         {PRESETS.map(p=>(
           <button key={p.id} onClick={()=>applyPreset(p)}
-            style={{flexShrink:0,padding:"7px 13px",background:preset===p.id?T.primary:T.bg2,color:preset===p.id?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:12,fontWeight:preset===p.id?600:400,cursor:"pointer",fontFamily:F,transition:"all .15s",whiteSpace:"nowrap"}}>
+            style={{flexShrink:0,padding:"7px 14px",background:preset===p.id?T.primary:T.bg2,color:preset===p.id?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:12,fontWeight:preset===p.id?600:400,cursor:"pointer",fontFamily:F,transition:"all .15s",whiteSpace:"nowrap"}}>
             {p.label}
           </button>
         ))}
-        {/* Custom — shows selected range when active */}
         <button onClick={()=>{setDraftFrom(fromDate);setDraftTo(toDate);setShowPicker(true);}}
-          style={{flexShrink:0,padding:"7px 13px",background:preset==="custom"?T.primary:T.bg2,color:preset==="custom"?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:12,fontWeight:preset==="custom"?600:400,cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",transition:"all .15s"}}>
-          {preset==="custom" ? `${fmtShort(fromDate)} – ${fmtShort(toDate)}` : "Custom"}
+          style={{flexShrink:0,padding:"7px 14px",background:preset==="custom"?T.primary:T.bg2,color:preset==="custom"?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:12,fontWeight:preset==="custom"?600:400,cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",transition:"all .15s"}}>
+          {preset==="custom"?`${fmtShort(fromDate)} – ${fmtShort(toDate)}`:"Custom"}
         </button>
-        {/* Divider */}
-        <div style={{width:1,height:22,background:T.border,flexShrink:0,marginLeft:2,marginRight:2}}/>
-        {/* PDF export */}
-        <button onClick={exportPDF} disabled={pdfLoading||days===0}
-          style={{flexShrink:0,display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:pdfLoading||days===0?T.bg2:T.primary,border:"none",borderRadius:R.pill,fontSize:12,fontWeight:600,color:pdfLoading||days===0?T.muted:"#fff",cursor:pdfLoading||days===0?"default":"pointer",whiteSpace:"nowrap",fontFamily:F}}>
-          <Icon n="copy" s={13} c={pdfLoading||days===0?T.muted:"#fff"}/>
-          {pdfLoading?"Generating…":"PDF"}
-        </button>
-        {/* WhatsApp share */}
-        {days>0&&(()=>{
-          const waText = encodeURIComponent(
-            `*GasLedger P&L Report*\n`+
-            `Plant: ${window.__plantName||"Gas Plant"}\n`+
-            `Period: ${rangeLabel} (${days} days)\n`+
-            `---\n`+
-            `Revenue: NGN ${Math.round(totals.rev).toLocaleString("en-NG")}\n`+
-            `COGS: NGN ${Math.round(totals.cogs).toLocaleString("en-NG")}\n`+
-            `Gross profit: NGN ${Math.round(totals.grossP).toLocaleString("en-NG")} (${Math.round((totals.grossP/totals.rev)*100)||0}%)\n`+
-            `Expenses: NGN ${Math.round(totals.exp).toLocaleString("en-NG")}\n`+
-            `Net profit: NGN ${Math.round(totals.profit).toLocaleString("en-NG")}\n`+
-            `---\n`+
-            `Gas sold: ${Math.round(totals.gas).toLocaleString("en-NG")} kg\n`+
-            `Cash: NGN ${Math.round(totals.cash).toLocaleString("en-NG")}\n`+
-            `POS: NGN ${Math.round(totals.pos).toLocaleString("en-NG")}\n`+
-            `_Sent from GasLedger_`
-          );
-          return (
-            <a href={`https://wa.me/?text=${waText}`} target="_blank" rel="noopener noreferrer"
-              style={{flexShrink:0,display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:"#25d366",borderRadius:R.pill,fontSize:12,fontWeight:600,color:"#fff",textDecoration:"none",whiteSpace:"nowrap"}}>
-              <Icon n="share" s={13} c="#fff"/>
-              Share
-            </a>
-          );
-        })()}
       </div>
+
+      {/* Row 2 — fixed action bar: PDF + Share (always visible, never scroll off) */}
+      {(()=>{
+        const waText = encodeURIComponent(
+          `*GasLedger P&L Report*\n`+
+          `Plant: ${window.__plantName||"Gas Plant"}\n`+
+          `Period: ${rangeLabel} (${days} days)\n`+
+          `---\n`+
+          `Revenue: NGN ${Math.round(totals.rev).toLocaleString("en-NG")}\n`+
+          `COGS: NGN ${Math.round(totals.cogs).toLocaleString("en-NG")}\n`+
+          `Gross profit: NGN ${Math.round(totals.grossP).toLocaleString("en-NG")} (${Math.round((totals.grossP/totals.rev)*100)||0}%)\n`+
+          `Expenses: NGN ${Math.round(totals.exp).toLocaleString("en-NG")}\n`+
+          `Net profit: NGN ${Math.round(totals.profit).toLocaleString("en-NG")}\n`+
+          `---\n`+
+          `Gas sold: ${Math.round(totals.gas).toLocaleString("en-NG")} kg\n`+
+          `Cash: NGN ${Math.round(totals.cash).toLocaleString("en-NG")}\n`+
+          `POS: NGN ${Math.round(totals.pos).toLocaleString("en-NG")}\n`+
+          `_Sent from GasLedger_`
+        );
+        return (
+          <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"8px 12px",display:"flex",gap:8,flexShrink:0}}>
+            <button onClick={exportPDF} disabled={pdfLoading||days===0}
+              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",background:pdfLoading||days===0?T.bg2:T.primary,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:pdfLoading||days===0?T.muted:"#fff",cursor:pdfLoading||days===0?"default":"pointer",fontFamily:F}}>
+              <Icon n="copy" s={15} c={pdfLoading||days===0?T.muted:"#fff"}/>
+              {pdfLoading?"Generating…":"Export PDF"}
+            </button>
+            <a href={days>0?`https://wa.me/?text=${waText}`:"#"} target="_blank" rel="noopener noreferrer"
+              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",background:days>0?"#25d366":T.bg2,borderRadius:R.md,fontSize:13,fontWeight:600,color:days>0?"#fff":T.muted,textDecoration:"none",pointerEvents:days>0?"auto":"none"}}>
+              <Icon n="share" s={15} c={days>0?"#fff":T.muted}/>
+              Share via WA
+            </a>
+          </div>
+        );
+      })()}
 
       {/* Range summary bar */}
       <div style={{background:T.primary,padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
