@@ -924,18 +924,139 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
         </Card>
 
         <SLabel>Expenses</SLabel>
-        <Card pad="14px" style={{marginBottom:12}}>
-          {exps.map((ex,i)=>(
-            <div key={i} style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-              <div style={{flex:2}}><Input label={i===0?"Category":""} value={ex.cat} onChange={v=>setE(i,"cat",v)} placeholder="e.g. Salary"/></div>
-              <div style={{flex:1}}><Input label={i===0?"Amount":""} value={ex.amt} onChange={v=>setE(i,"amt",v)} type="number" prefix="₦" placeholder="0"/></div>
-              {exps.length>1&&<button onClick={()=>setExps(p=>p.filter((_,j)=>j!==i))} style={{marginBottom:14,width:34,height:40,borderRadius:R.sm,background:"#fee2e2",border:"none",cursor:"pointer",color:T.danger,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <Icon n="close" s={14} c={T.danger}/>
-              </button>}
-            </div>
-          ))}
-          <button onClick={()=>setExps(p=>[...p,{cat:"",amt:""}])} style={{width:"100%",padding:"9px",background:T.bg,border:`1px dashed ${T.borderMid}`,borderRadius:R.sm,fontSize:13,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:F,marginBottom:4}}>+ Add expense</button>
-        </Card>
+        {/* Expense manager — card list with add/edit/delete */}
+        {(()=>{
+          const CATS = ["Salary","Utility","Maintenance","Repairs","Transport","Miscellaneous","Security","Generator","Office","Other"];
+          const [showExpModal, setShowExpModal]   = useState(false);
+          const [editIdx,      setEditIdx]        = useState(null); // null = new
+          const [expCat,       setExpCat]         = useState("");
+          const [expAmt,       setExpAmt]         = useState("");
+          const [expErr,       setExpErr]         = useState("");
+
+          const openAdd  = () => { setEditIdx(null); setExpCat(""); setExpAmt(""); setExpErr(""); setShowExpModal(true); };
+          const openEdit = (i) => { setEditIdx(i); setExpCat(exps[i].cat); setExpAmt(String(exps[i].amt)); setExpErr(""); setShowExpModal(true); };
+          const saveExp  = () => {
+            if (!expCat.trim()) { setExpErr("Enter a category."); return; }
+            if (!expAmt || Number(expAmt)<=0) { setExpErr("Enter a valid amount."); return; }
+            if (editIdx!==null) {
+              setExps(p=>p.map((x,i)=>i===editIdx?{cat:expCat.trim(),amt:expAmt}:x));
+            } else {
+              setExps(p=>[...p.filter(x=>x.cat||x.amt), {cat:expCat.trim(),amt:expAmt}]);
+            }
+            setShowExpModal(false);
+          };
+          const delExp = (i) => setExps(p=>p.filter((_,j)=>j!==i));
+
+          const filledExps = exps.filter(x=>x.cat&&x.amt);
+
+          return (
+            <>
+              <Card style={{marginBottom:12}}>
+                {filledExps.length===0 ? (
+                  <div style={{padding:"16px",textAlign:"center",color:T.muted,fontSize:13}}>
+                    No expenses yet. Tap below to add one.
+                  </div>
+                ) : (
+                  filledExps.map((ex,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<filledExps.length-1?`1px solid ${T.border}`:"none"}}>
+                      {/* Category icon dot */}
+                      <div style={{width:36,height:36,borderRadius:R.md,background:`${T.primary}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{ex.cat.slice(0,2).toUpperCase()}</span>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{ex.cat}</div>
+                        <div style={{fontSize:12,color:T.danger,fontWeight:600,marginTop:1}}>−{fmt(Number(ex.amt))}</div>
+                      </div>
+                      {/* Edit button */}
+                      <button onClick={()=>openEdit(i)} style={{background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.sm,padding:"5px 10px",cursor:"pointer",fontSize:12,color:T.text,fontFamily:F,fontWeight:500}}>Edit</button>
+                      {/* Delete button */}
+                      <button onClick={()=>delExp(i)} style={{background:"#fee2e2",border:"none",borderRadius:R.sm,width:32,height:32,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <Icon n="close" s={13} c={T.danger}/>
+                      </button>
+                    </div>
+                  ))
+                )}
+                {/* Total row */}
+                {filledExps.length>0&&(
+                  <div style={{padding:"10px 14px",background:T.bg,display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:`1px solid ${T.border}`}}>
+                    <span style={{fontSize:12,color:T.muted,fontFamily:F}}>Total expenses</span>
+                    <span style={{fontSize:14,fontWeight:700,color:T.danger,fontFamily:F}}>−{fmt(totalExp)}</span>
+                  </div>
+                )}
+              </Card>
+
+              {/* Add expense button */}
+              <button onClick={openAdd} style={{width:"100%",padding:"11px",background:T.surface,border:`1.5px dashed ${T.borderMid}`,borderRadius:R.lg,fontSize:13,fontWeight:600,color:T.primary,cursor:"pointer",fontFamily:F,marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <Icon n="plus" s={15} c={T.primary}/>
+                Add expense
+              </button>
+
+              {/* Add / Edit expense bottom sheet */}
+              {showExpModal&&(
+                <div style={{position:"absolute",inset:0,background:T.overlay,display:"flex",alignItems:"flex-end",zIndex:200}}>
+                  <div style={{background:T.surface,borderRadius:"16px 16px 0 0",padding:"20px 16px 32px",width:"100%",fontFamily:F}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                      <span style={{fontSize:16,fontWeight:600,color:T.text}}>{editIdx!==null?"Edit expense":"Add expense"}</span>
+                      <button onClick={()=>setShowExpModal(false)} style={{background:T.bg2,border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <Icon n="close" s={14} c={T.muted}/>
+                      </button>
+                    </div>
+
+                    {/* Category label */}
+                    <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:6}}>Category</div>
+                    <input value={expCat} onChange={e=>{setExpCat(e.target.value);setExpErr("");}}
+                      placeholder="e.g. Salary"
+                      style={{width:"100%",padding:"11px 12px",border:`1.5px solid ${expErr&&!expCat?T.danger:T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box",marginBottom:8}}
+                      onFocus={e=>e.target.style.borderColor=T.primary}
+                      onBlur={e=>e.target.style.borderColor=expErr&&!expCat?T.danger:T.borderMid}
+                    />
+                    {/* Quick category chips */}
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+                      {CATS.map(c=>(
+                        <button key={c} onClick={()=>{setExpCat(c);setExpErr("");}}
+                          style={{padding:"4px 10px",background:expCat===c?T.primary:T.bg2,color:expCat===c?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:F,transition:"all .12s"}}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Amount */}
+                    <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:6}}>Amount</div>
+                    <div style={{position:"relative",marginBottom:8}}>
+                      <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,color:T.muted,fontFamily:F,fontWeight:500,pointerEvents:"none"}}>₦</span>
+                      <input value={expAmt} onChange={e=>{setExpAmt(e.target.value);setExpErr("");}} type="number"
+                        placeholder="0"
+                        style={{width:"100%",padding:"11px 12px 11px 28px",border:`1.5px solid ${expErr&&!expAmt?T.danger:T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
+                        onFocus={e=>e.target.style.borderColor=T.primary}
+                        onBlur={e=>e.target.style.borderColor=expErr&&!expAmt?T.danger:T.borderMid}
+                      />
+                    </div>
+                    {/* Quick amount chips */}
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+                      {[5000,10000,15000,20000,50000].map(v=>(
+                        <button key={v} onClick={()=>{setExpAmt(String(v));setExpErr("");}}
+                          style={{padding:"4px 10px",background:Number(expAmt)===v?T.primary:T.bg2,color:Number(expAmt)===v?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:F}}>
+                          {v>=1000?(v/1000)+"k":v}
+                        </button>
+                      ))}
+                    </div>
+
+                    {expErr&&<div style={{background:`${T.danger}10`,borderRadius:R.sm,padding:"8px 12px",marginBottom:12,fontSize:12,color:T.danger}}>{expErr}</div>}
+
+                    <div style={{display:"flex",gap:8}}>
+                      {editIdx!==null&&(
+                        <button onClick={()=>{delExp(editIdx);setShowExpModal(false);}} style={{padding:"12px",background:"#fee2e2",border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:T.danger,cursor:"pointer",fontFamily:F}}>Delete</button>
+                      )}
+                      <button onClick={saveExp} style={{flex:1,padding:"13px",background:T.primary,border:"none",borderRadius:R.md,fontSize:14,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F}}>
+                        {editIdx!==null?"Save changes":"Add expense"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         <SLabel>Notes</SLabel>
         <Card pad="12px 14px" style={{marginBottom:20}}>
