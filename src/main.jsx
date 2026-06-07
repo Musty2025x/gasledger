@@ -7,3 +7,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <GasLedgerApp />
   </React.StrictMode>
 )
+
+// Register service worker for PWA install prompt
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}

@@ -2971,22 +2971,50 @@ export default function GasLedgerApp() {
     * { -webkit-tap-highlight-color: transparent; }
   `;
 
-  const Shell = ({children}) => (
-    <div style={{
-      height:"100%",
-      display:"flex",
-      flexDirection:"column",
-      background:T.bg,
-      width:"100%",
-      maxWidth:480,
-      margin:"0 auto",
-      position:"relative",
-      overflow:"hidden",
-    }}>
+  const Shell = ({children}) => {
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showBanner,    setShowBanner]    = useState(false);
+
+   useEffect(() => {
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowBanner(true);
+    });
+  }, []);
+
+  const install = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const result = await installPrompt.userChoice;
+    if (result.outcome === "accepted") setShowBanner(false);
+  };
+
+  return (
+    <div style={{height:"100%",display:"flex",flexDirection:"column",background:T.bg,width:"100%",maxWidth:480,margin:"0 auto",position:"relative",overflow:"hidden"}}>
       <style>{globalCSS}</style>
+      {/* Install banner — shows on Android Chrome automatically */}
+      {showBanner && (
+        <div style={{background:T.primary,padding:"10px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0,zIndex:200}}>
+          <div style={{width:36,height:36,borderRadius:10,background:T.gold,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:20}}>
+            <Icon n="gas" s={20} c={T.goldFg}/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:"#fff",fontFamily:F}}>Install GasLedger</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Add to home screen for quick access</div>
+          </div>
+          <button onClick={install} style={{background:T.gold,border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,color:T.goldFg,cursor:"pointer",fontFamily:F,flexShrink:0}}>
+            Install
+          </button>
+          <button onClick={()=>setShowBanner(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,.5)",cursor:"pointer",fontSize:18,padding:"0 4px",flexShrink:0}}>
+            ×
+          </button>
+        </div>
+      )}
       {children}
     </div>
   );
+};
 
   // ── Auth loading ──────────────────────────────────────────
   if (authLd || (user && (profLd || !inviteChecked))) return <Shell><Spinner/></Shell>;
