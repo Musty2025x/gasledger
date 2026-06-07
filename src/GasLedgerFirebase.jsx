@@ -116,6 +116,13 @@ const Icon = ({ n, s=20, c="currentColor" }) => {
     remove:  "M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z M22 11h-6",
     user:    "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2 M12 11a4 4 0 100-8 4 4 0 000 8z",
     shield:  "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+    chevron: "M9 18l6-6-6-6",
+    plant:   "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10",
+    mail:    "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6",
+    lock:    "M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2z M7 11V7a5 5 0 0110 0v4",
+    edit:    "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
+    copy:    "M8 17.929H6c-1.105 0-2-.912-2-2.036V5.036C4 3.91 4.895 3 6 3h8c1.105 0 2 .911 2 2.036v1.866m-6 .17h8c1.105 0 2 .91 2 2.035v10.857C20 21.09 19.105 22 18 22h-8c-1.105 0-2-.911-2-2.036V9.107c0-1.124.895-2.036 2-2.036z",
+    flame:   "M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z M12 7v5l3 3",
   };
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -485,7 +492,10 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, sellPrice, 
     );
   };
 
-  const chartData = [...entries].reverse().slice(-7).map(e=>({l:fmtShort(e.date).split(" ")[0], v:calcEntry(e).sales}));
+  const chartData = [...entries].reverse().slice(-7).map(e=>({
+    l: new Date(e.date).toLocaleDateString("en-NG",{day:"numeric",month:"short"}),
+    v: calcEntry(e, SP, CP).sales,
+  }));
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg}}>
@@ -868,7 +878,15 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 24px"}}>
         {tab==="deliveries"&&(<>
-          {cur&&(
+          {cur&&(()=>{
+            // Days-remaining estimate based on average daily burn
+            const periodDays = Math.max(1, Math.ceil(
+              (new Date() - new Date(cur.delivery.date)) / (1000*60*60*24)
+            ));
+            const avgBurnPerDay = cur.sold > 0 ? cur.sold / periodDays : 0;
+            const daysLeft = avgBurnPerDay > 0 ? Math.floor(cur.remaining / avgBurnPerDay) : null;
+
+            return (
             <Card style={{marginBottom:12,border:`1.5px solid ${T.primary}`}}>
               <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
@@ -886,6 +904,12 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
                   <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span style={{fontSize:12,color:T.warning}}>Carry-forward</span><span style={{fontSize:12,fontWeight:600,color:T.warning}}>+{fmtKg(cur.carryForward)}</span></div>
                 )}
                 <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span style={{fontSize:12,color:T.muted}}>Sold</span><span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmtKg(cur.sold)}</span></div>
+                {avgBurnPerDay>0&&(
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
+                    <span style={{fontSize:12,color:T.muted}}>Avg daily burn</span>
+                    <span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmtKg(Math.round(avgBurnPerDay))}/day</span>
+                  </div>
+                )}
                 <Divider my={8}/>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:13,fontWeight:600,color:T.text}}>Remaining now</span>
@@ -894,10 +918,26 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
                 <div style={{marginTop:8,height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${Math.max(2,cur.pct)}%`,background:cur.pct>40?T.success:cur.pct>15?T.warning:T.danger,borderRadius:R.pill}}/>
                 </div>
-                <div style={{fontSize:11,color:T.muted,marginTop:4,textAlign:"right"}}>{cur.pct}% left</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+                  <span style={{fontSize:11,color:T.muted,fontFamily:F}}>{cur.pct}% remaining</span>
+                  {daysLeft!==null&&(
+                    <span style={{fontSize:11,fontWeight:600,fontFamily:F,color:daysLeft<=3?T.danger:daysLeft<=7?T.warning:T.success}}>
+                      ~{daysLeft} day{daysLeft!==1?"s":""} left
+                    </span>
+                  )}
+                </div>
+                {daysLeft!==null&&daysLeft<=5&&(
+                  <div style={{marginTop:8,background:daysLeft<=2?`${T.danger}12`:`${T.warning}12`,borderRadius:R.sm,padding:"8px 10px",display:"flex",gap:8,alignItems:"center"}}>
+                    <Icon n="alert" s={14} c={daysLeft<=2?T.danger:T.warning}/>
+                    <span style={{fontSize:12,color:daysLeft<=2?T.danger:T.warning,fontFamily:F,fontWeight:600}}>
+                      {daysLeft<=2?"Stock critically low — reorder now":"Running low — consider reordering soon"}
+                    </span>
+                  </div>
+                )}
               </div>
             </Card>
-          )}
+            );
+          })()}
           <SLabel mt={8}>All delivery periods</SLabel>
           {stock.periods.map((p,i)=>{
             const pct=p.available>0?Math.round((p.remaining/p.available)*100):0;
@@ -1229,9 +1269,11 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
                 {totals.variance>=0?"+":"-"}{fmt(Math.abs(totals.variance))}
               </span>
             </div>
-            <div style={{marginTop:6,fontSize:11,color:totals.variance>=0?T.success:T.danger,fontFamily:F,fontWeight:600}}>
-              {totals.expRev>0 ? Math.abs(totals.variance/totals.expRev*100).toFixed(1) : "0"}%
-              {" "}{totals.variance>=0 ? "surplus — collected more than expected" : "shortfall — investigate missing payment"}
+            <div style={{marginTop:6,fontSize:11,color:totals.variance===0?T.success:totals.variance>0?T.success:T.danger,fontFamily:F,fontWeight:600}}>
+              {totals.variance===0
+                ? "Exact match — all gas accounted for"
+                : `${totals.expRev>0?Math.abs(totals.variance/totals.expRev*100).toFixed(1):"0"}% ${totals.variance>0?"surplus — collected more than expected":"shortfall — investigate missing payment"}`
+              }
             </div>
           </Card>
 
