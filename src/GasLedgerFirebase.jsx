@@ -466,7 +466,7 @@ const SetupScreen = ({user}) => {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, sellPrice, costPrice}) => {
+const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice}) => {
   const [hide, setHide] = useState(false);
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
@@ -538,6 +538,95 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, sellPrice, 
       </div>
 
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 16px"}}>
+
+        {/* ── Onboarding checklist ────────────────────────────
+            Derives completion from live data — no extra state.
+            Hides automatically once all 3 steps are done.      */}
+        {(()=>{
+          const hasDelivery  = stock.periods.length > 0;
+          const hasPrice     = SP > DEFAULT_SELL_PRICE || (sellPrice && sellPrice > 0);
+          const hasEntry     = entries.length > 0;
+          const allDone      = hasDelivery && hasPrice && hasEntry;
+          if (allDone) return null;
+
+          const steps = [
+            {
+              done: hasDelivery,
+              num:  1,
+              title:"Log your first delivery",
+              sub:  "Record how much gas you received and the supplier cost per kg.",
+              cta:  "Add delivery",
+              fn:   goStock,
+            },
+            {
+              done: hasPrice,
+              num:  2,
+              title:"Set your selling price",
+              sub:  "Enter the current price per kg. This auto-fills every daily entry.",
+              cta:  "Set price",
+              fn:   goSetPrice,
+            },
+            {
+              done: hasEntry,
+              num:  3,
+              title:"Log your first daily entry",
+              sub:  "Record today's meter readings and cash collected.",
+              cta:  "New entry",
+              fn:   goEntry,
+            },
+          ];
+
+          const doneCount = steps.filter(s=>s.done).length;
+          const pct       = Math.round((doneCount/3)*100);
+
+          return (
+            <div style={{marginBottom:16}}>
+              <Card pad="0">
+                {/* Header */}
+                <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started</div>
+                    <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{doneCount} of 3 done</span>
+                  </div>
+                  {/* Progress bar */}
+                  <div style={{height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:T.primary,borderRadius:R.pill,transition:"width .4s ease"}}/>
+                  </div>
+                </div>
+                {/* Steps */}
+                {steps.map((s,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",opacity:s.done?0.55:1,transition:"opacity .3s"}}>
+                    {/* Step indicator */}
+                    <div style={{
+                      width:28,height:28,borderRadius:"50%",flexShrink:0,marginTop:1,
+                      background:s.done?T.success:`${T.primary}12`,
+                      border:`1.5px solid ${s.done?T.success:T.border}`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                    }}>
+                      {s.done
+                        ? <Icon n="check" s={14} c="#fff"/>
+                        : <span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{s.num}</span>
+                      }
+                    </div>
+                    {/* Text */}
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:s.done?400:600,color:T.text,fontFamily:F,textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
+                      {!s.done&&<div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2,lineHeight:1.5}}>{s.sub}</div>}
+                    </div>
+                    {/* CTA */}
+                    {!s.done&&(
+                      <button onClick={s.fn}
+                        style={{flexShrink:0,padding:"6px 12px",background:T.primary,border:"none",borderRadius:R.md,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",marginTop:1}}>
+                        {s.cta}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </Card>
+            </div>
+          );
+        })()}
+
         {/* Stock summary */}
         {stock.current&&(()=>{
           const {delivery,available,remaining,pct,carryForward,sold}=stock.current;
@@ -861,7 +950,10 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
 // STOCK & REFILL
 // ═══════════════════════════════════════════════════════════════
 const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery, onDeleteDelivery, back}) => {
-  const [tab,       setTab]       = useState("deliveries");
+  // Auto-switch to prices tab if navigated from onboarding "Set price" CTA
+  const initTab = window.__stockTab || "deliveries";
+  const [tab, setTab] = useState(initTab);
+  useEffect(() => { delete window.__stockTab; }, []);
   const [showDel,   setShowDel]   = useState(false);
   const [showPx,    setShowPx]    = useState(false);
   const [editDel,   setEditDel]   = useState(null); // delivery being edited
@@ -2492,7 +2584,7 @@ export default function GasLedgerApp() {
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
+        {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="entry"     && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)}/>}
         {screen==="stock"     && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"       && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
