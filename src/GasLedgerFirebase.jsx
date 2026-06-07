@@ -1360,12 +1360,6 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
 
   // ── PDF helper: format numbers without ₦ (jsPDF Helvetica lacks the glyph) ──
   const pdfFmt = (n) => "NGN " + Math.round(n).toLocaleString("en-NG");
-  const pdfFmtShort = (n) => {
-    const v = Math.round(n);
-    if (v >= 1000000) return "NGN " + (v/1000000).toFixed(1) + "M";
-    if (v >= 1000)    return "NGN " + (v/1000).toFixed(1) + "k";
-    return "NGN " + v;
-  };
 
   // ── PDF export using jsPDF (loaded from CDN at export time) ──
   const exportPDF = async () => {
@@ -1492,19 +1486,30 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
         doc.text("Day-by-Day Breakdown", mg, y); y += 4;
         doc.autoTable({
           startY: y, margin:{left:mg, right:mg},
-          head: [["Date","Sales","Gas","Gross Profit"]],
+          head: [["Date","Sales (NGN)","Gas","Gross Profit (NGN)"]],
           body: filtered.map(e => {
             const c = calcEntry(e, SP, CP);
-            // Use short format in table to prevent truncation
-            return [fmtShort(e.date), pdfFmtShort(c.sales), fmtKg(c.gas), pdfFmtShort(c.grossProfit)];
-          }).concat([[`Total (${days}d)`, pdfFmtShort(totals.rev), fmtKg(totals.gas), pdfFmtShort(totals.grossP)]]),
+            // Use full numbers — no abbreviation
+            return [
+              fmtShort(e.date),
+              Math.round(c.sales).toLocaleString("en-NG"),
+              fmtKg(c.gas),
+              Math.round(c.grossProfit).toLocaleString("en-NG"),
+            ];
+          }).concat([[
+            `Total (${days}d)`,
+            Math.round(totals.rev).toLocaleString("en-NG"),
+            fmtKg(totals.gas),
+            Math.round(totals.grossP).toLocaleString("en-NG"),
+          ]]),
           styles: {fontSize:9, cellPadding:3},
           headStyles: {fillColor:[13,59,46], textColor:255},
+          // Let autoTable size columns automatically — no fixed widths
           columnStyles: {
-            0:{cellWidth:28},
-            1:{halign:"right", cellWidth:38},
-            2:{halign:"right", cellWidth:28},
-            3:{halign:"right", cellWidth:40},
+            0:{cellWidth:25},
+            1:{halign:"right"},
+            2:{halign:"right", cellWidth:22},
+            3:{halign:"right"},
           },
           didParseCell: (data) => {
             if (data.row.index === filtered.length && data.section==="body") {
@@ -1513,18 +1518,20 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
             }
           },
         });
-        y = doc.lastAutoTable.finalY + 10;
+        y = doc.lastAutoTable.finalY + 8;
       }
 
-      // ── Signature line ───────────────────────────────────
-      if (y + 30 > pageH - 20) { doc.addPage(); y = 20; }
-      doc.setDrawColor(180); doc.setLineWidth(0.3);
-      const sigY = y + 12;
-      doc.line(mg,         sigY, mg+60,       sigY);
-      doc.line(pageW/2+10, sigY, pageW/2+70,  sigY);
-      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(130);
-      doc.text("Prepared by",          mg,         sigY+5);
-      doc.text("Date",                 pageW/2+10, sigY+5);
+      // ── Prepared by / Date lines — bottom of last content page ──
+      // Only add if enough space on current page, otherwise skip
+      if (y + 25 < pageH - 20) {
+        doc.setDrawColor(200); doc.setLineWidth(0.3);
+        const sigY = y + 14;
+        doc.line(mg,           sigY, mg+55,         sigY);
+        doc.line(pageW/2+10,   sigY, pageW/2+65,    sigY);
+        doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(150);
+        doc.text("Prepared by", mg,          sigY+5);
+        doc.text("Date",        pageW/2+10,  sigY+5);
+      }
 
       // ── Page footer ──────────────────────────────────────
       const pages = doc.getNumberOfPages();
