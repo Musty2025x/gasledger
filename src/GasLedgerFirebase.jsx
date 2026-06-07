@@ -109,7 +109,7 @@ const Icon = ({ n, s=20, c="currentColor" }) => {
     logout:   "M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9",
     gas:      "M6 2h9l3 5v13a2 2 0 01-2 2H5a2 2 0 01-2-2V4a2 2 0 012-2h1z M9 2v5h6",
     truck:    "M1 3h15v13H1z M16 8h4l3 3v5h-7V8z M5.5 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3z M18.5 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
-    price:    "M12 2a10 10 0 100 20A10 10 0 0012 2z M12 6v6l4 2",
+    price:    "M12 2H6a2 2 0 00-2 2v6l8.59 8.59a2 2 0 002.82 0l4.59-4.59a2 2 0 000-2.82L12 2z M7 7h.01",
     settings: "M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z",
     people:  "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75",
     invite:  "M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z M19 8v6M22 11h-6",
@@ -123,6 +123,7 @@ const Icon = ({ n, s=20, c="currentColor" }) => {
     edit:    "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
     copy:    "M8 17.929H6c-1.105 0-2-.912-2-2.036V5.036C4 3.91 4.895 3 6 3h8c1.105 0 2 .911 2 2.036v1.866m-6 .17h8c1.105 0 2 .91 2 2.035v10.857C20 21.09 19.105 22 18 22h-8c-1.105 0-2-.911-2-2.036V9.107c0-1.124.895-2.036 2-2.036z",
     flame:   "M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z M12 7v5l3 3",
+    share:   "M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8 M16 6l-4-4-4 4 M12 2v13",
   };
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -697,16 +698,59 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
     finally { setLd(false); }
   };
 
-  if (done) return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,gap:12,padding:32,fontFamily:F}}>
-      <div style={{width:56,height:56,borderRadius:"50%",background:`${T.success}15`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <Icon n="check" s={28} c={T.success}/>
+  if (done) {
+    const savedGross = grossP;
+    const savedSales = sales;
+    const savedGas   = gas;
+    const waText = encodeURIComponent(
+      `*GasLedger Daily Summary*\n` +
+      `Plant: ${window.__plantName||"Gas Plant"}\n` +
+      `Date: ${new Date(date).toLocaleDateString("en-NG",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}\n` +
+      `---\n` +
+      `Gas dispensed: ${Math.round(savedGas).toLocaleString("en-NG")} kg\n` +
+      `Total sales: NGN ${Math.round(savedSales).toLocaleString("en-NG")}\n` +
+      `Cash: NGN ${Math.round(Number(cash)||0).toLocaleString("en-NG")}\n` +
+      `POS: NGN ${Math.round(Number(pos)||0).toLocaleString("en-NG")}\n` +
+      `---\n` +
+      `Gross profit: NGN ${Math.round(savedGross).toLocaleString("en-NG")}\n` +
+      `Margin: NGN ${GP-CP}/kg\n` +
+      `_Sent from GasLedger_`
+    );
+    return (
+      <div style={{flex:1,display:"flex",flexDirection:"column",background:T.bg,fontFamily:F}}>
+        <div style={{background:T.primary,padding:"32px 24px 28px",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+          <div style={{width:56,height:56,borderRadius:"50%",background:"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Icon n="check" s={28} c={T.gold}/>
+          </div>
+          <div style={{fontSize:20,fontWeight:700,color:"#fff",textAlign:"center"}}>Entry saved</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,.55)",textAlign:"center"}}>{fmtD(date)}</div>
+        </div>
+        {/* Stats */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,padding:"16px 16px 0"}}>
+          {[
+            ["Gas dispensed", fmtKg(savedGas)],
+            ["Total sales",   fmt(savedSales)],
+            ["Gross profit",  fmt(savedGross)],
+            ["Margin/kg",     `₦${GP-CP}`],
+          ].map(([l,v])=>(
+            <div key={l} style={{background:T.surface,borderRadius:R.lg,border:`1px solid ${T.border}`,padding:"12px 14px"}}>
+              <div style={{fontSize:11,color:T.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:3,fontFamily:F}}>{l}</div>
+              <div style={{fontSize:17,fontWeight:700,color:T.text,fontFamily:F}}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:"16px 16px 0",display:"flex",flexDirection:"column",gap:8}}>
+          {/* WhatsApp share */}
+          <a href={`https://wa.me/?text=${waText}`} target="_blank" rel="noopener noreferrer"
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",background:"#25d366",borderRadius:R.md,fontSize:14,fontWeight:600,color:"#fff",textDecoration:"none"}}>
+            <Icon n="share" s={18} c="#fff"/>
+            Share via WhatsApp
+          </a>
+          <Btn label="Back to dashboard" onClick={back} size="lg" variant="outline"/>
+        </div>
       </div>
-      <div style={{fontSize:18,fontWeight:700,color:T.text}}>Entry saved</div>
-      <div style={{fontSize:13,color:T.muted,textAlign:"center",lineHeight:1.6}}>Synced to Firestore.</div>
-      <div style={{marginTop:8,width:"100%"}}><Btn label="Back to dashboard" onClick={back} size="lg"/></div>
-    </div>
-  );
+    );
+  }
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
@@ -755,7 +799,29 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
             <span style={{fontSize:13,fontWeight:600,color:T.text}}>₦{GP}/kg</span>
           </div>
           <Input label="Cash sales" value={cash} onChange={setCash} type="number" prefix="₦" placeholder="0"/>
+          {/* Quick amount chips for cash */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-8,marginBottom:12}}>
+            {[5000,10000,20000,50000,100000].map(v=>(
+              <button key={v} onClick={()=>setCash(String((Number(cash)||0)+v))}
+                style={{padding:"4px 10px",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.pill,fontSize:11,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:F,transition:"background .12s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.borderMid}
+                onMouseLeave={e=>e.currentTarget.style.background=T.bg2}>
+                +{v>=1000?(v/1000)+"k":v}
+              </button>
+            ))}
+          </div>
           <Input label="POS / transfer" value={pos} onChange={setPos} type="number" prefix="₦" placeholder="0"/>
+          {/* Quick amount chips for POS */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-8,marginBottom:4}}>
+            {[5000,10000,20000,50000,100000].map(v=>(
+              <button key={v} onClick={()=>setPos(String((Number(pos)||0)+v))}
+                style={{padding:"4px 10px",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.pill,fontSize:11,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:F,transition:"background .12s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.borderMid}
+                onMouseLeave={e=>e.currentTarget.style.background=T.bg2}>
+                +{v>=1000?(v/1000)+"k":v}
+              </button>
+            ))}
+          </div>
           {sales>0&&expRev>0&&(
             <div style={{background:Math.abs(variance/expRev)<.05?`${T.success}10`:`${T.danger}10`,borderRadius:R.sm,padding:"9px 12px",marginBottom:4}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12,color:T.muted}}>Expected</span><span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmt(expRev)}</span></div>
@@ -1200,11 +1266,19 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
     ? `${fmtShort(fromDate)} – ${fmtShort(toDate)}`
     : PRESETS.find(p=>p.id===preset)?.label || "";
 
+  // ── PDF helper: format numbers without ₦ (jsPDF Helvetica lacks the glyph) ──
+  const pdfFmt = (n) => "NGN " + Math.round(n).toLocaleString("en-NG");
+  const pdfFmtShort = (n) => {
+    const v = Math.round(n);
+    if (v >= 1000000) return "NGN " + (v/1000000).toFixed(1) + "M";
+    if (v >= 1000)    return "NGN " + (v/1000).toFixed(1) + "k";
+    return "NGN " + v;
+  };
+
   // ── PDF export using jsPDF (loaded from CDN at export time) ──
   const exportPDF = async () => {
     setPdfLoading(true);
     try {
-      // Dynamically load jsPDF + autoTable
       if (!window.jspdf) {
         await new Promise((res,rej) => {
           const s = document.createElement("script");
@@ -1224,110 +1298,122 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
       const pageW = doc.internal.pageSize.getWidth();
-      const margin = 16;
+      const pageH = doc.internal.pageSize.getHeight();
+      const mg = 16;
 
-      // ── Header ──
+      // ── Header ──────────────────────────────────────────────
       doc.setFillColor(13, 59, 46);
-      doc.rect(0, 0, pageW, 32, "F");
+      doc.rect(0, 0, pageW, 38, "F");
       doc.setTextColor(245, 200, 66);
-      doc.setFontSize(18); doc.setFont("helvetica","bold");
-      doc.text("GasLedger P&L Report", margin, 13);
+      doc.setFontSize(20); doc.setFont("helvetica","bold");
+      doc.text("GasLedger P&L Report", mg, 14);
       doc.setTextColor(255,255,255);
       doc.setFontSize(10); doc.setFont("helvetica","normal");
-      doc.text(rangeLabel, margin, 21);
-      doc.text(`${days} day${days!==1?"s":""} · Generated ${new Date().toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"})}`, margin, 27);
+      // Plant name on second line
+      const plantNamePDF = totals.rev > 0 ? (window.__plantName||"Gas Plant") : "Gas Plant";
+      doc.text(plantNamePDF, mg, 22);
+      doc.setFontSize(9);
+      doc.text(`${rangeLabel}  ·  ${days} day${days!==1?"s":""}  ·  Generated ${new Date().toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"})}`, mg, 29);
+      // Right-align avg/day
+      doc.setTextColor(245,200,66);
+      doc.text(`Avg/day: ${pdfFmt(avgDaily)}`, pageW-mg, 22, {align:"right"});
 
-      let y = 42;
+      let y = 48;
 
-      // ── KPI boxes ──
-      doc.setFontSize(8); doc.setFont("helvetica","normal");
+      // ── KPI boxes ──────────────────────────────────────────
+      doc.setFont("helvetica","normal");
       const kpis = [
-        ["Revenue",      fmt(totals.rev)],
-        ["Gross profit", fmt(totals.grossP)],
-        ["Net profit",   fmt(totals.profit)],
+        ["Revenue",      pdfFmt(totals.rev)],
+        ["Gross profit", pdfFmt(totals.grossP)],
+        ["Net profit",   pdfFmt(totals.profit)],
         ["Gas sold",     fmtKg(totals.gas)],
-        ["Cash",         fmt(totals.cash)],
-        ["POS/transfer", fmt(totals.pos)],
+        ["Cash",         pdfFmt(totals.cash)],
+        ["POS/transfer", pdfFmt(totals.pos)],
       ];
-      const kpiW = (pageW - margin*2 - 10) / 3;
+      const kpiW = (pageW - mg*2 - 10) / 3;
       kpis.forEach(([l,v],i) => {
         const col = i%3, row = Math.floor(i/3);
-        const x = margin + col*(kpiW+5);
-        const ky = y + row*18;
+        const x = mg + col*(kpiW+5);
+        const ky = y + row*20;
         doc.setFillColor(241,244,242);
-        doc.roundedRect(x, ky, kpiW, 14, 2, 2, "F");
-        doc.setTextColor(107,127,120); doc.setFontSize(7);
+        doc.roundedRect(x, ky, kpiW, 16, 2, 2, "F");
+        doc.setTextColor(107,127,120); doc.setFontSize(7); doc.setFont("helvetica","normal");
         doc.text(l.toUpperCase(), x+4, ky+5);
         doc.setTextColor(17,26,23); doc.setFontSize(9); doc.setFont("helvetica","bold");
-        doc.text(v, x+4, ky+11);
+        // Clip value to fit box width
+        const maxW = kpiW - 8;
+        doc.text(v, x+4, ky+12, {maxWidth: maxW});
         doc.setFont("helvetica","normal");
       });
-      y += 44;
+      y += 48;
 
-      // ── Income statement ──
-      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
-      doc.text("Income Statement", margin, y); y += 6;
+      // ── Income statement ─────────────────────────────────
+      doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
+      doc.text("Income Statement", mg, y); y += 5;
       const incomeRows = [
-        ["Cash sales",       fmt(totals.cash),   false],
-        ["POS / transfer",   fmt(totals.pos),    false],
-        ["Gross revenue",    fmt(totals.rev),    true ],
+        ["Cash sales",     pdfFmt(totals.cash), false],
+        ["POS / transfer", pdfFmt(totals.pos),  false],
+        ["Gross revenue",  pdfFmt(totals.rev),  true],
       ];
       if (CP > 0) {
-        incomeRows.push([`Supplier cost (${fmtKg(totals.gas)} × ₦${CP}/kg)`, fmt(totals.cogs), false]);
-        incomeRows.push(["Gross profit", fmt(totals.grossP), true]);
+        incomeRows.push([`Supplier cost (${fmtKg(totals.gas)} x NGN ${CP}/kg)`, pdfFmt(totals.cogs), false]);
+        incomeRows.push(["Gross profit", pdfFmt(totals.grossP), true]);
       }
-      expList.forEach(([cat,amt]) => incomeRows.push([cat, fmt(amt), false]));
-      incomeRows.push(["Total expenses", fmt(totals.exp), true]);
-      incomeRows.push(["NET PROFIT", fmt(totals.profit), true]);
-
+      expList.forEach(([cat,amt]) => incomeRows.push([cat, pdfFmt(amt), false]));
+      incomeRows.push(["Total expenses", pdfFmt(totals.exp), true]);
+      incomeRows.push([`NET PROFIT  (margin: ${Math.round((totals.profit/totals.rev)*100)||0}%)`, pdfFmt(totals.profit), true]);
       doc.autoTable({
-        startY: y, margin:{left:margin,right:margin},
+        startY: y, margin:{left:mg, right:mg},
         head: [["Description","Amount"]],
-        body: incomeRows.map(([d,v,b]) => [d,v]),
-        styles: {fontSize:9, cellPadding:3},
+        body: incomeRows.map(([d,v]) => [d, v]),
+        styles: {fontSize:9, cellPadding:3, font:"helvetica"},
         headStyles: {fillColor:[13,59,46], textColor:255, fontStyle:"bold"},
         bodyStyles: {textColor:[17,26,23]},
-        columnStyles: {1:{halign:"right"}},
+        columnStyles: {0:{cellWidth:"auto"}, 1:{halign:"right", cellWidth:42}},
         didParseCell: (data) => {
-          const bold = incomeRows[data.row.index]?.[2];
-          if (bold && data.section==="body") {
+          if (incomeRows[data.row.index]?.[2] && data.section==="body") {
             data.cell.styles.fontStyle = "bold";
             data.cell.styles.fillColor = [232,237,234];
           }
         },
-        willDrawPage: () => {},
       });
-      y = doc.lastAutoTable.finalY + 10;
+      y = doc.lastAutoTable.finalY + 8;
 
-      // ── Variance check ──
-      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
-      doc.text("Cash Variance Check", margin, y); y += 4;
+      // ── Variance check ──────────────────────────────────
+      doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
+      doc.text("Cash Variance Check", mg, y); y += 4;
       doc.autoTable({
-        startY: y, margin:{left:margin,right:margin},
+        startY: y, margin:{left:mg, right:mg},
         body: [
-          [`Expected (${fmtKg(totals.gas)} × ₦${SP}/kg)`, fmt(totals.expRev)],
-          ["Actual collected",                              fmt(totals.rev)],
-          ["Variance",                                      (totals.variance>=0?"+":"")+fmt(totals.variance)],
+          [`Expected (${fmtKg(totals.gas)} x NGN ${SP}/kg)`, pdfFmt(totals.expRev)],
+          ["Actual collected",                                  pdfFmt(totals.rev)],
+          ["Variance", (totals.variance===0 ? "Exact match — all gas accounted for" : (totals.variance>=0?"+":"-")+" "+pdfFmt(Math.abs(totals.variance)))],
         ],
         styles: {fontSize:9, cellPadding:3},
-        columnStyles: {1:{halign:"right"}},
+        columnStyles: {0:{cellWidth:"auto"}, 1:{halign:"right", cellWidth:52}},
       });
-      y = doc.lastAutoTable.finalY + 10;
+      y = doc.lastAutoTable.finalY + 8;
 
-      // ── Day-by-day ──
+      // ── Day-by-day ──────────────────────────────────────
       if (filtered.length > 0) {
-        doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
-        doc.text("Day-by-Day Breakdown", margin, y); y += 4;
+        doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
+        doc.text("Day-by-Day Breakdown", mg, y); y += 4;
         doc.autoTable({
-          startY: y, margin:{left:margin,right:margin},
+          startY: y, margin:{left:mg, right:mg},
           head: [["Date","Sales","Gas","Gross Profit"]],
           body: filtered.map(e => {
             const c = calcEntry(e, SP, CP);
-            return [fmtShort(e.date), fmt(c.sales), fmtKg(c.gas), fmt(c.grossProfit)];
-          }).concat([[`Total (${days}d)`, fmt(totals.rev), fmtKg(totals.gas), fmt(totals.grossP)]]),
+            // Use short format in table to prevent truncation
+            return [fmtShort(e.date), pdfFmtShort(c.sales), fmtKg(c.gas), pdfFmtShort(c.grossProfit)];
+          }).concat([[`Total (${days}d)`, pdfFmtShort(totals.rev), fmtKg(totals.gas), pdfFmtShort(totals.grossP)]]),
           styles: {fontSize:9, cellPadding:3},
           headStyles: {fillColor:[13,59,46], textColor:255},
-          columnStyles: {1:{halign:"right"},2:{halign:"right"},3:{halign:"right"}},
+          columnStyles: {
+            0:{cellWidth:28},
+            1:{halign:"right", cellWidth:38},
+            2:{halign:"right", cellWidth:28},
+            3:{halign:"right", cellWidth:40},
+          },
           didParseCell: (data) => {
             if (data.row.index === filtered.length && data.section==="body") {
               data.cell.styles.fontStyle = "bold";
@@ -1335,14 +1421,25 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
             }
           },
         });
+        y = doc.lastAutoTable.finalY + 10;
       }
 
-      // ── Footer ──
+      // ── Signature line ───────────────────────────────────
+      if (y + 30 > pageH - 20) { doc.addPage(); y = 20; }
+      doc.setDrawColor(180); doc.setLineWidth(0.3);
+      const sigY = y + 12;
+      doc.line(mg,         sigY, mg+60,       sigY);
+      doc.line(pageW/2+10, sigY, pageW/2+70,  sigY);
+      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(130);
+      doc.text("Prepared by",          mg,         sigY+5);
+      doc.text("Date",                 pageW/2+10, sigY+5);
+
+      // ── Page footer ──────────────────────────────────────
       const pages = doc.getNumberOfPages();
       for (let i=1;i<=pages;i++) {
         doc.setPage(i);
-        doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(150);
-        doc.text(`GasLedger · Page ${i} of ${pages}`, pageW/2, doc.internal.pageSize.getHeight()-8, {align:"center"});
+        doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(160);
+        doc.text(`GasLedger  ·  ${plantNamePDF}  ·  Page ${i} of ${pages}`, pageW/2, pageH-8, {align:"center"});
       }
 
       doc.save(`GasLedger_PnL_${fromDate}_to_${toDate}.pdf`);
@@ -1363,14 +1460,40 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
       <TopBar title="P&L report" left={<BackBtn onClick={back}/>}
         right={
-          <div style={{display:"flex",gap:6}}>
+          <div style={{display:"flex",gap:5}}>
             <button onClick={exportPDF} disabled={pdfLoading||days===0}
-              style={{background:pdfLoading||days===0?T.bg2:T.primary,border:"none",borderRadius:R.md,padding:"6px 10px",cursor:pdfLoading||days===0?"default":"pointer",display:"flex",alignItems:"center",gap:4,color:pdfLoading||days===0?T.muted:"#fff"}}>
-              <Icon n="copy" s={13} c={pdfLoading||days===0?T.muted:"#fff"}/>
-              <span style={{fontSize:12,fontWeight:600,fontFamily:F}}>{pdfLoading?"…":"PDF"}</span>
+              style={{background:pdfLoading||days===0?T.bg2:T.primary,border:"none",borderRadius:R.md,padding:"6px 9px",cursor:pdfLoading||days===0?"default":"pointer",display:"flex",alignItems:"center",gap:3,color:pdfLoading||days===0?T.muted:"#fff"}}>
+              <Icon n="copy" s={12} c={pdfLoading||days===0?T.muted:"#fff"}/>
+              <span style={{fontSize:11,fontWeight:600,fontFamily:F}}>{pdfLoading?"…":"PDF"}</span>
             </button>
+            {/* WhatsApp share — generates plain text summary */}
+            {days>0&&(()=>{
+              const waText = encodeURIComponent(
+                `*GasLedger P&L Report*\n`+
+                `Plant: ${window.__plantName||"Gas Plant"}\n`+
+                `Period: ${rangeLabel} (${days} days)\n`+
+                `---\n`+
+                `Revenue: NGN ${Math.round(totals.rev).toLocaleString("en-NG")}\n`+
+                `COGS: NGN ${Math.round(totals.cogs).toLocaleString("en-NG")}\n`+
+                `Gross profit: NGN ${Math.round(totals.grossP).toLocaleString("en-NG")} (${Math.round((totals.grossP/totals.rev)*100)||0}%)\n`+
+                `Expenses: NGN ${Math.round(totals.exp).toLocaleString("en-NG")}\n`+
+                `Net profit: NGN ${Math.round(totals.profit).toLocaleString("en-NG")}\n`+
+                `---\n`+
+                `Gas sold: ${Math.round(totals.gas).toLocaleString("en-NG")} kg\n`+
+                `Cash: NGN ${Math.round(totals.cash).toLocaleString("en-NG")}\n`+
+                `POS: NGN ${Math.round(totals.pos).toLocaleString("en-NG")}\n`+
+                `_Sent from GasLedger_`
+              );
+              return (
+                <a href={`https://wa.me/?text=${waText}`} target="_blank" rel="noopener noreferrer"
+                  style={{display:"flex",alignItems:"center",gap:3,padding:"6px 9px",background:"#25d366",borderRadius:R.md,fontSize:11,fontWeight:600,color:"#fff",textDecoration:"none"}}>
+                  <Icon n="share" s={12} c="#fff"/>
+                  WA
+                </a>
+              );
+            })()}
             <button onClick={()=>{setDraftFrom(fromDate);setDraftTo(toDate);setShowPicker(true);}}
-              style={{background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.md,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,color:T.text,fontFamily:F}}>
+              style={{background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.md,padding:"6px 9px",cursor:"pointer",fontSize:11,fontWeight:600,color:T.text,fontFamily:F}}>
               Custom
             </button>
           </div>
@@ -1496,7 +1619,7 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
           <SLabel>Day-by-day breakdown</SLabel>
           <Card style={{marginBottom:16}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 76px",gap:0,padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`}}>
-              {["Date","Sales","Gas","Gross P"].map(h=>(
+              {["Date","Sales","Gas","Profit"].map(h=>(
                 <span key={h} style={{fontSize:10,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.4,fontFamily:F,textAlign:h!=="Date"?"right":"left"}}>{h}</span>
               ))}
             </div>
@@ -2223,7 +2346,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
               <span style={{background:`${T.success}15`,color:T.success,fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:R.pill,fontFamily:F}}>Active</span>
             </div>
             {/* Feature list */}
-            {["Dashboard & stock summary","Daily entry logging","P&L reports with date ranges","Stock & refill tracker"].map(f=>(
+            {["Dashboard & stock summary","Daily entry logging","P&L reports with date ranges","PDF export & WhatsApp share","Stock & refill tracker","Staff access (invite by email)"].map(f=>(
               <div key={f} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                 <div style={{width:16,height:16,borderRadius:"50%",background:`${T.success}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   <Icon n="check" s={10} c={T.success}/>
@@ -2231,8 +2354,8 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
                 <span style={{fontSize:12,color:T.text2,fontFamily:F}}>{f}</span>
               </div>
             ))}
-            <div style={{marginTop:12,padding:"10px 12px",background:`${T.gold}12`,borderRadius:R.md,fontSize:12,color:"#7a5100",fontFamily:F,lineHeight:1.5}}>
-              Paid plans with multi-staff access and PDF export coming soon.
+            <div style={{marginTop:12,padding:"10px 12px",background:`${T.primary}08`,borderRadius:R.md,fontSize:12,color:T.muted,fontFamily:F,lineHeight:1.5}}>
+              Paid plans with subscription billing and multi-plant management coming soon.
             </div>
           </div>
         </div>
@@ -2312,8 +2435,12 @@ export default function GasLedgerApp() {
     }
   }, [user, profile, profLd, inviteChecked]);
 
-  // Expose setScreen globally for Dashboard quick-action buttons
-  useEffect(() => { window.__setScreen = setScreen; return () => { delete window.__setScreen; }; }, []);
+  // Expose setScreen and plant name globally for Dashboard quick-actions and PDF
+  useEffect(() => {
+    window.__setScreen  = setScreen;
+    window.__plantName  = profile?.displayName || "";
+    return () => { delete window.__setScreen; delete window.__plantName; };
+  }, [profile?.displayName]);
 
   const globalCSS = `
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
