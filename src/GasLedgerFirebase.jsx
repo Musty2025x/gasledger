@@ -658,8 +658,9 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, sellPrice, 
 // ═══════════════════════════════════════════════════════════════
 // DAILY ENTRY
 // ═══════════════════════════════════════════════════════════════
-const DailyEntry = ({back, onSave, lastEntry, pricePerKg}) => {
+const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDates=[]}) => {
   const GP  = pricePerKg || DEFAULT_SELL_PRICE;
+  const CP  = costPerKg  || DEFAULT_COST_PRICE;
   const now = new Date().toISOString().split("T")[0];
   const [date,  setDate]  = useState(now);
   const [open,  setOpen]  = useState(String(lastEntry?.closeMeter||""));
@@ -672,12 +673,18 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg}) => {
   const [done,  setDone]  = useState(false);
   const [err,   setErr]   = useState("");
 
-  const gas     = (Number(close)||0)-(Number(open)||0);
-  const sales   = (Number(cash)||0)+(Number(pos)||0);
-  const expRev  = gas*GP;
-  const variance= sales-expRev;
-  const profit  = sales - exps.reduce((s,x)=>s+(Number(x.amt)||0),0);
-  const valid   = close&&open&&Number(close)>Number(open)&&(cash||pos);
+  const gas       = (Number(close)||0)-(Number(open)||0);
+  const sales     = (Number(cash)||0)+(Number(pos)||0);
+  const expRev    = gas*GP;
+  const cogs      = gas*CP;
+  const grossP    = sales - cogs;
+  const variance  = sales-expRev;
+  const totalExp  = exps.reduce((s,x)=>s+(Number(x.amt)||0),0);
+  const netProfit = grossP - totalExp;
+  const valid     = close&&open&&Number(close)>Number(open)&&(cash||pos);
+
+  // Duplicate date check
+  const isDuplicate = existingDates.includes(date);
 
   const setE = (i,k,v) => setExps(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
 
@@ -706,13 +713,27 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg}) => {
       <TopBar title="Daily entry" left={<BackBtn onClick={back}/>}/>
       {/* Live preview bar */}
       {(gas>0||sales>0)&&(
-        <div style={{background:T.primary,padding:"8px 16px",display:"flex",gap:8}}>
-          {[[fmtKg(gas),"Gas"],[fmt(sales),"Sales"],[(variance>=0?"+":"")+fmt(variance),"Variance"]].map(([v,l])=>(
-            <div key={l} style={{flex:1,background:"rgba(255,255,255,.08)",borderRadius:R.sm,padding:"7px 8px",textAlign:"center"}}>
-              <div style={{fontSize:12,fontWeight:600,color:"#fff",fontFamily:F}}>{v}</div>
+        <div style={{background:T.primary,padding:"8px 16px",display:"flex",gap:6}}>
+          {[
+            [fmtKg(gas),                              "Gas"],
+            [fmt(sales),                              "Sales"],
+            [(variance>=0?"+":"")+fmt(variance),      "Variance"],
+            [CP>0?fmt(grossP):fmt(netProfit),         CP>0?"Gross P":"Net P"],
+          ].map(([v,l])=>(
+            <div key={l} style={{flex:1,background:"rgba(255,255,255,.08)",borderRadius:R.sm,padding:"7px 6px",textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:600,color:l==="Gross P"||l==="Net P"?(CP>0?grossP:netProfit)>=0?"#6ee7b7":"#fca5a5":"#fff",fontFamily:F}}>{v}</div>
               <div style={{fontSize:9,color:"rgba(255,255,255,.45)",fontFamily:F,textTransform:"uppercase",letterSpacing:.4,marginTop:1}}>{l}</div>
             </div>
           ))}
+        </div>
+      )}
+      {/* Duplicate date warning */}
+      {isDuplicate&&(
+        <div style={{background:"#fef3c7",borderBottom:`1px solid #f59e0b`,padding:"10px 16px",display:"flex",gap:10,alignItems:"center"}}>
+          <Icon n="alert" s={16} c="#b45309"/>
+          <div style={{fontSize:12,color:"#92400e",fontFamily:F,flex:1}}>
+            An entry already exists for <strong>{fmtD(date)}</strong>. Saving will create a duplicate — consider editing the existing entry instead.
+          </div>
         </div>
       )}
       {err&&<ErrBanner msg={err}/>}
@@ -797,6 +818,11 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 
   const cur = stock.current;
   const lp  = prices.length ? [...prices].sort((a,b)=>new Date(b.date)-new Date(a.date))[0] : null;
+  // Most recent delivery purchase price (for margin calc)
+  const latestDeliveryCost = stock.periods.length
+    ? ([...stock.periods].sort((a,b)=>new Date(b.delivery.date)-new Date(a.delivery.date))
+        .find(p=>p.delivery.pricePerKg>0)?.delivery.pricePerKg || 0)
+    : 0;
 
   const saveDel = async () => {
     if(!delKg||!delSup) return; setLd(true);
@@ -989,6 +1015,35 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
               <div style={{marginTop:10,background:T.bg,borderRadius:R.sm,padding:"8px 12px",fontSize:12,color:T.muted}}>Auto-fills the Daily Entry form.</div>
             </Card>
           )}
+          {/* Margin summary — shown when cost price is known from deliveries */}
+          {lp && latestDeliveryCost > 0 && (() => {
+            const margin    = lp.pricePerKg - latestDeliveryCost;
+            const marginPct = Math.round((margin / lp.pricePerKg) * 100);
+            return (
+              <Card pad="14px" style={{marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.6,marginBottom:10}}>Margin breakdown</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  {[
+                    {l:"Buy price",  v:`₦${latestDeliveryCost}/kg`, c:T.danger},
+                    {l:"Sell price", v:`₦${lp.pricePerKg}/kg`,      c:T.text},
+                    {l:"Margin",     v:`₦${margin}/kg`,              c:margin>0?T.success:T.danger},
+                  ].map(({l,v,c})=>(
+                    <div key={l} style={{background:T.bg,borderRadius:R.sm,padding:"10px 8px",textAlign:"center"}}>
+                      <div style={{fontSize:13,fontWeight:700,color:c,fontFamily:F}}>{v}</div>
+                      <div style={{fontSize:10,color:T.muted,marginTop:2,textTransform:"uppercase",letterSpacing:.3}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:12,color:T.muted}}>Gross margin percentage</span>
+                  <span style={{fontSize:14,fontWeight:700,color:marginPct>0?T.success:T.danger}}>{marginPct}%</span>
+                </div>
+                <div style={{marginTop:6,height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.max(2,Math.min(100,marginPct))}%`,background:marginPct>20?T.success:marginPct>10?T.warning:T.danger,borderRadius:R.pill}}/>
+                </div>
+              </Card>
+            );
+          })()}
           <SLabel mt={8}>Price history</SLabel>
           <Card>
             {[...prices].sort((a,b)=>new Date(b.date)-new Date(a.date)).map((p,i,arr)=>{
@@ -1064,6 +1119,7 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
+  const [pdfLoading, setPdfLoading] = useState(false);
   // ── date helpers ─────────────────────────────────────────
   const todayISO  = () => new Date().toISOString().split("T")[0];
   const daysAgo   = (n) => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split("T")[0]; };
@@ -1144,6 +1200,158 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
     ? `${fmtShort(fromDate)} – ${fmtShort(toDate)}`
     : PRESETS.find(p=>p.id===preset)?.label || "";
 
+  // ── PDF export using jsPDF (loaded from CDN at export time) ──
+  const exportPDF = async () => {
+    setPdfLoading(true);
+    try {
+      // Dynamically load jsPDF + autoTable
+      if (!window.jspdf) {
+        await new Promise((res,rej) => {
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      if (!window.jspdf?.jsPDF?.prototype?.autoTable) {
+        await new Promise((res,rej) => {
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js";
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 16;
+
+      // ── Header ──
+      doc.setFillColor(13, 59, 46);
+      doc.rect(0, 0, pageW, 32, "F");
+      doc.setTextColor(245, 200, 66);
+      doc.setFontSize(18); doc.setFont("helvetica","bold");
+      doc.text("GasLedger P&L Report", margin, 13);
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(10); doc.setFont("helvetica","normal");
+      doc.text(rangeLabel, margin, 21);
+      doc.text(`${days} day${days!==1?"s":""} · Generated ${new Date().toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"})}`, margin, 27);
+
+      let y = 42;
+
+      // ── KPI boxes ──
+      doc.setFontSize(8); doc.setFont("helvetica","normal");
+      const kpis = [
+        ["Revenue",      fmt(totals.rev)],
+        ["Gross profit", fmt(totals.grossP)],
+        ["Net profit",   fmt(totals.profit)],
+        ["Gas sold",     fmtKg(totals.gas)],
+        ["Cash",         fmt(totals.cash)],
+        ["POS/transfer", fmt(totals.pos)],
+      ];
+      const kpiW = (pageW - margin*2 - 10) / 3;
+      kpis.forEach(([l,v],i) => {
+        const col = i%3, row = Math.floor(i/3);
+        const x = margin + col*(kpiW+5);
+        const ky = y + row*18;
+        doc.setFillColor(241,244,242);
+        doc.roundedRect(x, ky, kpiW, 14, 2, 2, "F");
+        doc.setTextColor(107,127,120); doc.setFontSize(7);
+        doc.text(l.toUpperCase(), x+4, ky+5);
+        doc.setTextColor(17,26,23); doc.setFontSize(9); doc.setFont("helvetica","bold");
+        doc.text(v, x+4, ky+11);
+        doc.setFont("helvetica","normal");
+      });
+      y += 44;
+
+      // ── Income statement ──
+      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
+      doc.text("Income Statement", margin, y); y += 6;
+      const incomeRows = [
+        ["Cash sales",       fmt(totals.cash),   false],
+        ["POS / transfer",   fmt(totals.pos),    false],
+        ["Gross revenue",    fmt(totals.rev),    true ],
+      ];
+      if (CP > 0) {
+        incomeRows.push([`Supplier cost (${fmtKg(totals.gas)} × ₦${CP}/kg)`, fmt(totals.cogs), false]);
+        incomeRows.push(["Gross profit", fmt(totals.grossP), true]);
+      }
+      expList.forEach(([cat,amt]) => incomeRows.push([cat, fmt(amt), false]));
+      incomeRows.push(["Total expenses", fmt(totals.exp), true]);
+      incomeRows.push(["NET PROFIT", fmt(totals.profit), true]);
+
+      doc.autoTable({
+        startY: y, margin:{left:margin,right:margin},
+        head: [["Description","Amount"]],
+        body: incomeRows.map(([d,v,b]) => [d,v]),
+        styles: {fontSize:9, cellPadding:3},
+        headStyles: {fillColor:[13,59,46], textColor:255, fontStyle:"bold"},
+        bodyStyles: {textColor:[17,26,23]},
+        columnStyles: {1:{halign:"right"}},
+        didParseCell: (data) => {
+          const bold = incomeRows[data.row.index]?.[2];
+          if (bold && data.section==="body") {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [232,237,234];
+          }
+        },
+        willDrawPage: () => {},
+      });
+      y = doc.lastAutoTable.finalY + 10;
+
+      // ── Variance check ──
+      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
+      doc.text("Cash Variance Check", margin, y); y += 4;
+      doc.autoTable({
+        startY: y, margin:{left:margin,right:margin},
+        body: [
+          [`Expected (${fmtKg(totals.gas)} × ₦${SP}/kg)`, fmt(totals.expRev)],
+          ["Actual collected",                              fmt(totals.rev)],
+          ["Variance",                                      (totals.variance>=0?"+":"")+fmt(totals.variance)],
+        ],
+        styles: {fontSize:9, cellPadding:3},
+        columnStyles: {1:{halign:"right"}},
+      });
+      y = doc.lastAutoTable.finalY + 10;
+
+      // ── Day-by-day ──
+      if (filtered.length > 0) {
+        doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
+        doc.text("Day-by-Day Breakdown", margin, y); y += 4;
+        doc.autoTable({
+          startY: y, margin:{left:margin,right:margin},
+          head: [["Date","Sales","Gas","Gross Profit"]],
+          body: filtered.map(e => {
+            const c = calcEntry(e, SP, CP);
+            return [fmtShort(e.date), fmt(c.sales), fmtKg(c.gas), fmt(c.grossProfit)];
+          }).concat([[`Total (${days}d)`, fmt(totals.rev), fmtKg(totals.gas), fmt(totals.grossP)]]),
+          styles: {fontSize:9, cellPadding:3},
+          headStyles: {fillColor:[13,59,46], textColor:255},
+          columnStyles: {1:{halign:"right"},2:{halign:"right"},3:{halign:"right"}},
+          didParseCell: (data) => {
+            if (data.row.index === filtered.length && data.section==="body") {
+              data.cell.styles.fontStyle = "bold";
+              data.cell.styles.fillColor = [232,237,234];
+            }
+          },
+        });
+      }
+
+      // ── Footer ──
+      const pages = doc.getNumberOfPages();
+      for (let i=1;i<=pages;i++) {
+        doc.setPage(i);
+        doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(150);
+        doc.text(`GasLedger · Page ${i} of ${pages}`, pageW/2, doc.internal.pageSize.getHeight()-8, {align:"center"});
+      }
+
+      doc.save(`GasLedger_PnL_${fromDate}_to_${toDate}.pdf`);
+    } catch(e) {
+      console.error("PDF export failed:", e);
+      alert("PDF export failed. Please try again.");
+    } finally { setPdfLoading(false); }
+  };
+
   const Row = ({label,value,bold,credit,indent,last}) => (
     <div style={{display:"flex",justifyContent:"space-between",padding:indent?"9px 14px 9px 24px":"9px 14px",borderBottom:last?"none":`1px solid ${T.border}`,background:bold?T.bg:"transparent"}}>
       <span style={{fontSize:bold?13:12,fontWeight:bold?600:400,color:T.text,fontFamily:F}}>{label}</span>
@@ -1155,10 +1363,17 @@ const PnLScreen = ({entries, back, sellPrice, costPrice}) => {
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
       <TopBar title="P&L report" left={<BackBtn onClick={back}/>}
         right={
-          <button onClick={()=>{setDraftFrom(fromDate);setDraftTo(toDate);setShowPicker(true);}}
-            style={{background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.md,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600,color:T.text,fontFamily:F}}>
-            Custom
-          </button>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={exportPDF} disabled={pdfLoading||days===0}
+              style={{background:pdfLoading||days===0?T.bg2:T.primary,border:"none",borderRadius:R.md,padding:"6px 10px",cursor:pdfLoading||days===0?"default":"pointer",display:"flex",alignItems:"center",gap:4,color:pdfLoading||days===0?T.muted:"#fff"}}>
+              <Icon n="copy" s={13} c={pdfLoading||days===0?T.muted:"#fff"}/>
+              <span style={{fontSize:12,fontWeight:600,fontFamily:F}}>{pdfLoading?"…":"PDF"}</span>
+            </button>
+            <button onClick={()=>{setDraftFrom(fromDate);setDraftTo(toDate);setShowPicker(true);}}
+              style={{background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.md,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,color:T.text,fontFamily:F}}>
+              Custom
+            </button>
+          </div>
         }
       />
 
@@ -1616,13 +1831,31 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
 // ═══════════════════════════════════════════════════════════════
 const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
   const role = profile?.role || "owner";
-  // sub-screens: null | "plant" | "email" | "password" | "staff"
+  // sub-screens: null | "plant" | "email" | "password" | "staff" | "cost"
   const [sub,        setSub]       = useState(null);
 
   // Plant name
   const [plantName,  setPlantName] = useState(profile?.displayName || "");
   const [savingName, setSavingName]= useState(false);
   const [nameMsg,    setNameMsg]   = useState("");
+
+  // Default cost price
+  const [defCost,    setDefCost]   = useState(String(profile?.defaultCostPrice||""));
+  const [costMsg,    setCostMsg]   = useState("");
+  const [savingCost, setSavingCost]= useState(false);
+
+  const saveDefCost = async () => {
+    if (!defCost) return;
+    setSavingCost(true); setCostMsg("");
+    try {
+      const { updateDoc, getFirestore, doc } = await import("firebase/firestore");
+      const db = getFirestore();
+      await updateDoc(doc(db,"users",user.uid), { defaultCostPrice: Number(defCost) });
+      await updateDoc(doc(db,"plants",plantId),  { defaultCostPrice: Number(defCost) });
+      setCostMsg(`Default cost price set to ₦${Number(defCost).toLocaleString("en-NG")}/kg`);
+    } catch(e) { setCostMsg("Failed to save. Try again."); }
+    finally { setSavingCost(false); }
+  };
 
   // Email change
   const [newEmail,   setNewEmail]  = useState("");
@@ -1893,6 +2126,23 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
     </SubScreen>
   );
 
+  // ── Default cost price sub-screen ───────────────────────
+  if (sub === "cost") return (
+    <SubScreen title="Default cost price" children={<>
+      <p style={{fontSize:13,color:T.muted,lineHeight:1.6,marginBottom:16,fontFamily:F}}>
+        Set the default purchase price per kg from your supplier. This is used to calculate gross profit and COGS across all P&L reports.
+      </p>
+      <div style={{background:`${T.primary}08`,borderRadius:R.md,padding:"10px 14px",marginBottom:16,fontSize:12,color:T.muted,fontFamily:F}}>
+        Current: {profile?.defaultCostPrice ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg` : "Not set — using ₦0"}
+      </div>
+      <Input label="Cost price per kg" value={defCost} onChange={v=>{setDefCost(v);setCostMsg("");}} type="number" prefix="₦" placeholder="e.g. 1600" hint="This auto-fills deliveries and P&L cost calculations." onEnter={saveDefCost}/>
+      {costMsg&&(
+        <div style={{background:costMsg.includes("set")?`${T.success}10`:`${T.danger}10`,borderRadius:R.md,padding:"9px 12px",marginBottom:14,fontSize:13,color:costMsg.includes("set")?T.success:T.danger,fontFamily:F}}>{costMsg}</div>
+      )}
+      <Btn label="Save default cost price" onClick={saveDefCost} loading={savingCost} disabled={!defCost||Number(defCost)<=0} size="lg" icon="check"/>
+    </>}/>
+  );
+
   // ── Main settings list ───────────────────────────────────
   const Row = ({icon, label, sub, value, onClick, danger}) => (
     <div onClick={onClick} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",borderBottom:`1px solid ${T.border}`,background:T.surface,transition:"background .12s"}}
@@ -1939,6 +2189,9 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
         </div>
         <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
           <Row icon="plant"  label="Plant name" sub={profile?.displayName} onClick={()=>{ setPlantName(profile?.displayName||""); setNameMsg(""); setSub("plant"); }}/>
+          <Row icon="price"  label="Default cost price"
+            sub={profile?.defaultCostPrice ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg purchase price` : "Not set — affects P&L accuracy"}
+            onClick={()=>{ setDefCost(String(profile?.defaultCostPrice||"")); setCostMsg(""); setSub("cost"); }}/>
           {role==="owner"&&(
             <Row icon="people" label="Staff access"
               sub={staffMembers.length>0?`${staffMembers.length} active staff member${staffMembers.length!==1?"s":""}`:invites.filter(i=>i.status==="pending").length>0?"Pending invite":"No staff yet"}
@@ -2034,7 +2287,7 @@ export default function GasLedgerApp() {
 
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
-  const liveCost  = latestCostPrice(deliveries);
+  const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
 
   const addEntry      = useCallback(e   => fbAddEntry(plantId,e),         [plantId]);
   const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
@@ -2121,7 +2374,7 @@ export default function GasLedgerApp() {
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard" && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
-        {screen==="entry"     && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice}/>}
+        {screen==="entry"     && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)}/>}
         {screen==="stock"     && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"       && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
         {screen==="history"   && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
