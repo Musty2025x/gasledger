@@ -16,6 +16,7 @@ import {
   addStandaloneExpense  as fbAddStandaloneExpense,
   updateStandaloneExpense as fbUpdateStandaloneExpense,
   deleteStandaloneExpense as fbDeleteStandaloneExpense,
+  addShiftExpense       as fbAddShiftExpense,
   updateEntry           as fbUpdateEntry,
   updateDelivery        as fbUpdateDelivery,
   deleteEntry           as fbDeleteEntry,
@@ -254,10 +255,10 @@ const BottomNav = ({active, onChange, role="owner"}) => {
     {id:"settings",   icon:"settings", label:"Settings"},
   ];
   const staffTabs = [
-    {id:"dashboard",   icon:"home",     label:"Home"},
-    {id:"entry",       icon:"entry",    label:"Entry"},
-    {id:"remittance",  icon:"cash",     label:"Money"},
-    {id:"history",     icon:"history",  label:"History"},
+    {id:"dashboard",    icon:"home",     label:"Home"},
+    {id:"entry",        icon:"entry",    label:"Entry"},
+    {id:"staffexpense", icon:"cash",     label:"Expenses"},
+    {id:"history",      icon:"history",  label:"History"},
   ];
   const tabs = role === "staff" ? staffTabs : ownerTabs;
   return (
@@ -710,7 +711,7 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
           {(role==="staff"?[
             {icon:"entry",label:"New entry",fn:goEntry},
-            {icon:"cash", label:"Money",    fn:()=>window.__setScreen&&window.__setScreen("remittance")},
+            {icon:"cash", label:"Expenses",    fn:()=>window.__setScreen&&window.__setScreen("staffexpense")},
           ]:[
             {icon:"history",label:"All entries",  fn:()=>window.__setScreen&&window.__setScreen("history")},
             {icon:"pnl",    label:"P&L report",   fn:()=>window.__setScreen&&window.__setScreen("pnl")},
@@ -3571,6 +3572,141 @@ const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice,
 };
 
 // ═══════════════════════════════════════════════════════════════
+// STAFF EXPENSE SCREEN
+// Staff records shift expenses: generator fuel, gas gifts, petty cash
+// Stored in the same standaloneExpenses collection — visible to owner
+// ═══════════════════════════════════════════════════════════════
+const StaffExpenseScreen = ({ onAdd, submittedBy, back, todayExpenses=[] }) => {
+  const today = new Date().toISOString().split("T")[0];
+  const CATS  = ["Generator Fuel","Gas Gift","Petty Cash","Transport","Maintenance","Repairs","Other"];
+
+  const [cat,  setCat]  = useState("");
+  const [amt,  setAmt]  = useState("");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(today);
+  const [ld,   setLd]   = useState(false);
+  const [err,  setErr]  = useState("");
+  const [ok,   setOk]   = useState("");
+
+  const save = async () => {
+    if (!cat.trim()) { setErr("Select or enter a category."); return; }
+    if (!amt || Number(amt) <= 0) { setErr("Enter a valid amount."); return; }
+    setLd(true); setErr(""); setOk("");
+    try {
+      await onAdd({
+        date,
+        category:    cat.trim(),
+        amount:      Number(amt),
+        note:        note.trim(),
+        submittedBy: submittedBy||"",
+        source:      "staff",
+      });
+      setOk(`₦${Number(amt).toLocaleString("en-NG")} ${cat} recorded.`);
+      setCat(""); setAmt(""); setNote("");
+    } catch(e) { setErr(e.message || "Failed. Try again."); }
+    finally { setLd(false); }
+  };
+
+  // Today's expenses submitted by staff
+  const todayTotal = todayExpenses.reduce((s,e)=>s+(e.amount||0), 0);
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
+      <TopBar title="Shift expenses" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
+
+      <div style={{flex:1,overflow:"auto",padding:"16px 16px 32px"}}>
+
+        {/* What this is for */}
+        <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
+          <Icon n="cash" s={18} c={T.primary}/>
+          <div style={{fontSize:12,color:T.text2,lineHeight:1.6}}>
+            Record any cash spent during your shift — generator fuel, gas given as gift, petty cash. The owner sees all entries.
+          </div>
+        </div>
+
+        {/* Today's total */}
+        {todayExpenses.length>0&&(
+          <Card pad="12px 14px" style={{marginBottom:16,background:T.primary,border:"none"}}>
+            <div style={{fontSize:11,color:"rgba(255,255,255,.5)",marginBottom:4,textTransform:"uppercase",letterSpacing:.6}}>Today's expenses</div>
+            <div style={{fontSize:22,fontWeight:700,color:T.gold}}>−{fmt(todayTotal)}</div>
+            <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+              {todayExpenses.map((e,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"rgba(255,255,255,.7)"}}>
+                  <span>{e.category}{e.note?` · ${e.note}`:""}</span>
+                  <span style={{fontWeight:600}}>−{fmt(e.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Category */}
+        <SLabel mt={0}>Category</SLabel>
+        <Card pad="14px" style={{marginBottom:12}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+            {CATS.map(c=>(
+              <button key={c} onClick={()=>{setCat(c);setErr("");setOk("");}}
+                style={{padding:"6px 12px",background:cat===c?T.primary:T.bg2,color:cat===c?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:12,fontWeight:cat===c?600:400,cursor:"pointer",fontFamily:F,transition:"all .12s"}}>
+                {c}
+              </button>
+            ))}
+          </div>
+          <input value={cat} onChange={e=>{setCat(e.target.value);setErr("");setOk("");}}
+            placeholder="Or type a category…"
+            style={{width:"100%",padding:"10px 12px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:13,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
+            onFocus={e=>e.target.style.borderColor=T.primary}
+            onBlur={e=>e.target.style.borderColor=T.borderMid}
+          />
+        </Card>
+
+        {/* Amount */}
+        <SLabel>Amount</SLabel>
+        <Card pad="14px" style={{marginBottom:12}}>
+          <div style={{position:"relative",marginBottom:8}}>
+            <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,color:T.muted,pointerEvents:"none"}}>₦</span>
+            <input value={amt} onChange={e=>{setAmt(e.target.value);setErr("");setOk("");}} type="number" placeholder="0"
+              style={{width:"100%",padding:"11px 12px 11px 28px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:15,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
+              onFocus={e=>e.target.style.borderColor=T.primary}
+              onBlur={e=>e.target.style.borderColor=T.borderMid}
+            />
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {[500,1000,2000,5000,10000,20000].map(v=>(
+              <button key={v} onClick={()=>{setAmt(String(v));setErr("");setOk("");}}
+                style={{padding:"5px 10px",background:Number(amt)===v?T.primary:T.bg2,color:Number(amt)===v?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:F}}>
+                {v>=1000?(v/1000)+"k":v}
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        {/* Date */}
+        <SLabel>Date</SLabel>
+        <Card pad="12px 14px" style={{marginBottom:12}}>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+            style={{width:"100%",padding:"8px 0",border:"none",fontSize:14,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
+          />
+        </Card>
+
+        {/* Note */}
+        <SLabel>Note (optional)</SLabel>
+        <Card pad="12px 14px" style={{marginBottom:16}}>
+          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. 5kg gas for Mama, generator ran 4hrs…"
+            style={{width:"100%",padding:"8px 0",border:"none",fontSize:13,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
+          />
+        </Card>
+
+        {err&&<ErrBanner msg={err}/>}
+        {ok&&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"10px 14px",marginBottom:12,fontSize:13,color:T.success,fontFamily:F,display:"flex",gap:8,alignItems:"center"}}><Icon n="check" s={14} c={T.success}/>{ok}</div>}
+
+        <Btn label="Record expense" onClick={save} loading={ld} disabled={!cat.trim()||!amt||Number(amt)<=0} size="lg" icon="check"/>
+        <div style={{marginTop:8}}><Btn label="Cancel" onClick={back} variant="outline" size="lg"/></div>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
 export default function GasLedgerApp() {
   const {user, loading:authLd}    = useAuth();
   const {profile, loading:profLd} = useUserProfile(user?.uid);
@@ -3602,6 +3738,7 @@ export default function GasLedgerApp() {
   const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
   const addRemittance      = useCallback(r   => fbAddRemittance(plantId,r),             [plantId]);
   const addExpense         = useCallback(e   => fbAddStandaloneExpense(plantId,e),      [plantId]);
+  const addShiftExpense    = useCallback(e   => fbAddShiftExpense(plantId,e),          [plantId]);
   const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId,id,d),[plantId]);
   const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId,id),  [plantId]);
   const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
@@ -3730,7 +3867,7 @@ export default function GasLedgerApp() {
     </div>
   );
 
-  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","monthly","expenses"];
+  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","staffexpense","monthly","expenses"];
 
   return (
     <Shell>
@@ -3744,10 +3881,11 @@ export default function GasLedgerApp() {
         {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
         {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
+        {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} submittedBy={user?.uid} back={()=>setScreen("dashboard")} todayExpenses={standaloneExpenses.filter(e=>e.date===new Date().toISOString().split("T")[0]&&e.submittedBy===user?.uid)}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
         {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost}/></Gate>}
       </div>
-      {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen} onChange={setScreen} role={role}/>}
+      {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen==="staffexpense"?"staffexpense":screen} onChange={setScreen} role={role}/>}
     </Shell>
   );
 }

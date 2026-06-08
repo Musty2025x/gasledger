@@ -456,6 +456,39 @@ export const useStandaloneExpenses = (plantId) => {
   return { data, loading };
 };
 
+// ═══════════════════════════════════════════════════════════════
+// BILLING — update plant/user plan after Paystack payment
+// ═══════════════════════════════════════════════════════════════
+export const updatePlan = async (uid, plantId, plan, paystackRef) => {
+  const now = serverTimestamp();
+  // Write to user doc
+  await updateDoc(userDoc(uid), {
+    plan,
+    planUpdatedAt: now,
+    paystackRef: paystackRef || null,
+  });
+  // Also write to plant doc for server-side rule checks
+  await updateDoc(doc(db, "plants", plantId), {
+    plan,
+    planUpdatedAt: now,
+  });
+};
+
+// Read current plan from profile (default "free")
+export const getPlan = (profile) => profile?.plan || "free";
+
+// ═══════════════════════════════════════════════════════════════
+// SHIFT EXPENSES (staff-recorded: generator fuel, gas gifts, petty cash)
+// /plants/{plantId}/standaloneExpenses — same collection, tagged with submittedBy
+// ═══════════════════════════════════════════════════════════════
+export const addShiftExpense = async (plantId, exp) => {
+  return addDoc(standaloneExpensesCol(plantId), {
+    ...exp,
+    source:    "staff",
+    createdAt: serverTimestamp(),
+  });
+};
+
 // useAuth hook — gives you { user, loading } anywhere in the tree
 export const useAuth = () => {
   const [user,    setUser]    = useState(undefined);
