@@ -288,15 +288,6 @@ export const invitesCol = () => collection(db, "invites");
 // Owner sends an invite
 export const createInvite = async (plantId, plantName, ownerUid, email) => {
   const norm = email.trim().toLowerCase();
-  // Check for existing pending invite to same plant
-  const existing = await getDocs(
-    query(invitesCol(),
-      where("plantId", "==", plantId),
-      where("email",   "==", norm),
-      where("status",  "==", "pending")
-    )
-  );
-  if (!existing.empty) throw new Error("A pending invite already exists for this email.");
   return addDoc(invitesCol(), {
     plantId, plantName, ownerUid,
     email: norm,
