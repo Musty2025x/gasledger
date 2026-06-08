@@ -1273,8 +1273,10 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
             </Card>
             );
           })()}
-          <SLabel mt={8}>All delivery periods</SLabel>
+          {stock.periods.length > 1 && <SLabel mt={8}>Previous deliveries</SLabel>}
           {stock.periods.map((p,i)=>{
+            // Skip the active (first) period — already shown in the hero card above
+            if (i===0) return null;
             const pct=p.available>0?Math.round((p.remaining/p.available)*100):0;
             return (
               <Card key={i} style={{marginBottom:8}}>
@@ -1345,10 +1347,10 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
                 </div>
                 <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:12,color:T.muted}}>Gross margin percentage</span>
-                  <span style={{fontSize:14,fontWeight:700,color:marginPct>0?T.success:T.danger}}>{marginPct}%</span>
+                  <span style={{fontSize:14,fontWeight:700,color:marginPct>=18?T.success:marginPct>=8?T.warning:T.danger}}>{marginPct}%</span>
                 </div>
                 <div style={{marginTop:6,height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${Math.max(2,Math.min(100,marginPct))}%`,background:marginPct>20?T.success:marginPct>10?T.warning:T.danger,borderRadius:R.pill}}/>
+                  <div style={{height:"100%",width:`${Math.max(2,Math.min(100,marginPct))}%`,background:marginPct>=18?T.success:marginPct>=8?T.warning:T.danger,borderRadius:R.pill}}/>
                 </div>
               </Card>
             );
@@ -3327,7 +3329,7 @@ const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice,
             <div style={{padding:"12px 16px 14px"}}>
               <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>Last {Math.min(months.length,12)} months</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                {[["Revenue",fmt(yearTotals.rev),T.gold],["Gross profit",fmt(yearTotals.grossP),yearMargin>15?"#6ee7b7":"#fca5a5"],["Gas sold",fmtKg(yearTotals.gas),"rgba(255,255,255,.8)"]].map(([l,v,c])=>(
+                {[["Revenue",fmt(yearTotals.rev),T.gold],["Gross profit",fmt(yearTotals.grossP),yearMargin>=15?"#6ee7b7":"#fca5a5"],["Gas sold",fmtKg(yearTotals.gas),"rgba(255,255,255,.8)"]].map(([l,v,c])=>(
                   <div key={l}>
                     <div style={{fontSize:10,color:"rgba(255,255,255,.45)",marginBottom:2}}>{l}</div>
                     <div style={{fontSize:15,fontWeight:700,color:c}}>{v}</div>
@@ -3353,7 +3355,7 @@ const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice,
                 <div style={{fontSize:11,color:T.muted,marginTop:2}}>{m.days} day{m.days!==1?"s":""} recorded{idx===0?" · current":""}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <Badge label={`${m.margin}%`} variant={m.margin>20?"success":m.margin>10?"warning":"danger"}/>
+                <Badge label={`${m.margin}%`} variant={m.margin>=18?"success":m.margin>=8?"warning":"danger"}/>
                 <Icon n="chevron" s={16} c={T.muted}/>
               </div>
             </div>
@@ -3374,7 +3376,7 @@ const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice,
                 ))}
               </div>
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
-                <Sparkline data={m.spark} color={m.margin>15?T.success:m.margin>8?T.warning:T.danger} h={44} w={72}/>
+                <Sparkline data={m.spark} color={m.margin>=15?T.success:m.margin>=8?T.warning:T.danger} h={44} w={72}/>
                 <div style={{fontSize:9,color:T.muted}}>daily gross profit</div>
               </div>
             </div>
