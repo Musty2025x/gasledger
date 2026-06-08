@@ -3522,6 +3522,24 @@ export default function GasLedgerApp() {
   // ── Logged in, no plant, no invite ────────────────────────
   if (!profile?.plantId) return <Shell><SetupScreen user={user}/></Shell>;
 
+  // ── Access revoked — staff removed by owner ────────────────
+  if (profile?.role === "revoked") return (
+    <Shell>
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,padding:32,gap:16,fontFamily:F,textAlign:"center"}}>
+        <div style={{width:64,height:64,borderRadius:"50%",background:`${T.danger}12`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <Icon n="lock" s={30} c={T.danger}/>
+        </div>
+        <div style={{fontSize:20,fontWeight:700,color:T.text}}>Access removed</div>
+        <div style={{fontSize:14,color:T.muted,lineHeight:1.7,maxWidth:280}}>
+          Your access to this plant has been removed by the owner. Contact the plant owner if you think this is a mistake.
+        </div>
+        <div style={{marginTop:8,width:"100%"}}>
+          <Btn label="Sign out" onClick={signOutUser} size="lg" variant="outline"/>
+        </div>
+      </div>
+    </Shell>
+  );
+
   // ── Data loading ──────────────────────────────────────────
   if ((eLd||dLd||pLd) && screen==="dashboard") return <Shell><Spinner/></Shell>;
 

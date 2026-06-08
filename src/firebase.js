@@ -298,7 +298,12 @@ export const createInvite = async (plantId, plantName, ownerUid, email) => {
 
 // Owner revokes a staff member (sets their user doc role to "revoked")
 export const revokeStaff = async (staffUid) => {
-  await updateDoc(userDoc(staffUid), { role: "revoked" });
+  // Set role to revoked — app checks this on every load and blocks access immediately
+  // Keep plantId briefly for UX context but role check happens first
+  await updateDoc(userDoc(staffUid), {
+    role:     "revoked",
+    revokedAt: serverTimestamp(),
+  });
 };
 
 // Delete a pending invite
