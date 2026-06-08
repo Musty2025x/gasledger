@@ -251,7 +251,7 @@ const BottomNav = ({active, onChange, role="owner"}) => {
   const staffTabs = [
     {id:"dashboard",   icon:"home",     label:"Home"},
     {id:"entry",       icon:"entry",    label:"Entry"},
-    {id:"remittance",  icon:"cash",     label:"Cash"},
+    {id:"remittance",  icon:"cash",     label:"Money"},
     {id:"history",     icon:"history",  label:"History"},
   ];
   const tabs = role === "staff" ? staffTabs : ownerTabs;
@@ -483,7 +483,7 @@ const SetupScreen = ({user}) => {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[]}) => {
+const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[], role="owner", onSignOut}) => {
   const [hide, setHide] = useState(false);
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
@@ -538,13 +538,21 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
       <div style={{background:T.primary,padding:"16px 16px 20px",paddingTop:"max(16px, env(safe-area-inset-top))",flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
           <div>
-            <div style={{fontSize:12,color:"rgba(255,255,255,.5)",fontFamily:F,marginBottom:2}}>Good day</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,.5)",fontFamily:F,marginBottom:2}}>{role==="staff"?"Staff account":"Good day"}</div>
             <div style={{fontSize:18,fontWeight:700,color:"#fff",fontFamily:F}}>{plantName||"Your Plant"}</div>
           </div>
-          <button onClick={()=>setHide(h=>!h)} style={{background:"rgba(255,255,255,.1)",border:"none",borderRadius:R.md,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:"rgba(255,255,255,.7)"}}>
-            <Icon n={hide?"eye":"eyeoff"} s={15} c="rgba(255,255,255,.7)"/>
-            <span style={{fontSize:12,fontFamily:F,fontWeight:500}}>{hide?"Show":"Hide"}</span>
-          </button>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {role==="staff"&&onSignOut&&(
+              <button onClick={onSignOut} style={{background:"rgba(255,255,255,.1)",border:"none",borderRadius:R.md,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:"rgba(255,255,255,.7)"}}>
+                <Icon n="logout" s={14} c="rgba(255,255,255,.7)"/>
+                <span style={{fontSize:12,fontFamily:F,fontWeight:500}}>Sign out</span>
+              </button>
+            )}
+            <button onClick={()=>setHide(h=>!h)} style={{background:"rgba(255,255,255,.1)",border:"none",borderRadius:R.md,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:"rgba(255,255,255,.7)"}}>
+              <Icon n={hide?"eye":"eyeoff"} s={15} c="rgba(255,255,255,.7)"/>
+              <span style={{fontSize:12,fontFamily:F,fontWeight:500}}>{hide?"Show":"Hide"}</span>
+            </button>
+          </div>
         </div>
         {/* Balance tile */}
         <div style={{background:"rgba(255,255,255,.08)",borderRadius:R.lg,padding:"14px 16px",border:"1px solid rgba(255,255,255,.1)"}}>
@@ -2719,17 +2727,25 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
 
   const [date,        setDate]        = useState(today);
   const [cashInDrawer,setCashInDrawer]= useState("");
+  const [posInDrawer, setPosInDrawer] = useState("");
   const [note,        setNote]        = useState("");
   const [ld,          setLd]          = useState(false);
-  const [done,        setDone]        = useState(null); // null | result object
+  const [done,        setDone]        = useState(null);
   const [err,         setErr]         = useState("");
 
   // Entry for selected date
-  const selectedEntry = entries.find(e => e.date === date);
-  const recordedCash  = selectedEntry ? selectedEntry.cashSales : null;
-  const diff          = recordedCash !== null && cashInDrawer !== ""
-    ? Number(cashInDrawer) - recordedCash
-    : null;
+  const selectedEntry  = entries.find(e => e.date === date);
+  const recordedCash   = selectedEntry ? selectedEntry.cashSales  : null;
+  const recordedPOS    = selectedEntry ? selectedEntry.posSales   : null;
+  const recordedTotal  = selectedEntry ? selectedEntry.cashSales + selectedEntry.posSales : null;
+
+  const submittedCash  = cashInDrawer !== "" ? Number(cashInDrawer) : null;
+  const submittedPOS   = posInDrawer  !== "" ? Number(posInDrawer)  : null;
+  const submittedTotal = (submittedCash !== null || submittedPOS !== null)
+    ? (submittedCash||0) + (submittedPOS||0) : null;
+
+  const diff   = recordedTotal !== null && submittedTotal !== null
+    ? submittedTotal - recordedTotal : null;
   const status = diff === null ? null : diff === 0 ? "match" : diff > 0 ? "surplus" : "shortfall";
 
   // Already submitted for this date?
@@ -2737,14 +2753,18 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
 
   const save = async () => {
     if (!selectedEntry) { setErr("No daily entry found for this date. Log the entry first."); return; }
-    if (cashInDrawer === "") { setErr("Please enter the cash amount in the drawer."); return; }
+    if (cashInDrawer === "" && posInDrawer === "") { setErr("Enter at least cash or POS amount."); return; }
     setLd(true); setErr("");
     try {
       const rec = {
         date,
         entryId:      selectedEntry.id,
-        cashInDrawer: Number(cashInDrawer),
+        cashInDrawer: submittedCash||0,
+        posInDrawer:  submittedPOS||0,
+        totalSubmitted: submittedTotal||0,
         recordedCash,
+        recordedPOS,
+        recordedTotal,
         difference:   diff,
         status,
         note,
@@ -2780,9 +2800,11 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
           <div style={{background:ss?.bg||T.bg,border:`1.5px solid ${ss?.border||T.border}`,borderRadius:R.lg,padding:"16px"}}>
             <div style={{fontSize:13,fontWeight:700,color:ss?.c||T.text,marginBottom:12}}>{ss?.label}</div>
             {[
-              ["Cash in drawer",  fmt(done.cashInDrawer)],
-              ["Recorded (entry)",fmt(done.recordedCash)],
-              ["Difference",      (done.difference>=0?"+":"")+fmt(done.difference)],
+              ["Cash submitted",   fmt(done.cashInDrawer||0)],
+              ["POS submitted",    fmt(done.posInDrawer||0)],
+              ["Total submitted",  fmt(done.totalSubmitted||done.cashInDrawer||0)],
+              ["Recorded (entry)", fmt(done.recordedTotal||done.recordedCash||0)],
+              ["Difference",       (done.difference>=0?"+":"")+fmt(done.difference)],
             ].map(([l,v])=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
                 <span style={{fontSize:13,color:T.muted,fontFamily:F}}>{l}</span>
@@ -2804,7 +2826,7 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
-      <TopBar title="Cash remittance" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
+      <TopBar title="Money remittance" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
 
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 32px"}}>
 
@@ -2812,7 +2834,7 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
         <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
           <Icon n="cash" s={18} c={T.primary}/>
           <div style={{fontSize:12,color:T.text2,lineHeight:1.6}}>
-            Count the cash in your drawer and enter the total below. The app will compare it to what was recorded in today's entry and flag any difference.
+            Enter the cash in your drawer and POS total below. The app compares your submission to what was recorded in today's entry and flags any difference.
           </div>
         </div>
 
@@ -2852,14 +2874,14 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
             <div>
               <div style={{fontSize:12,fontWeight:600,color:T.warning,fontFamily:F}}>Already submitted for this date</div>
               <div style={{fontSize:11,color:T.muted,marginTop:2}}>
-                Cash: {fmt(existing.cashInDrawer)} · Difference: {existing.difference>=0?"+":""}{fmt(existing.difference)}
+                Cash: {fmt(existing.cashInDrawer)} · POS: {fmt(existing.posInDrawer||0)} · Diff: {existing.difference>=0?"+":""}{fmt(existing.difference)}
               </div>
             </div>
           </div>
         )}
 
-        {/* Cash input */}
-        <SLabel>Cash count</SLabel>
+        {/* Money count — Cash + POS */}
+        <SLabel>Money count</SLabel>
         <Card pad="14px" style={{marginBottom:12}}>
           <Input
             label="Cash in drawer (count physically)"
@@ -2867,11 +2889,11 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
             onChange={v=>{setCashInDrawer(v);setErr("");}}
             type="number"
             prefix="₦"
-            placeholder="e.g. 42100"
+            placeholder="0"
             hint="Count every note and coin in the drawer right now."
           />
-          {/* Quick amount chips */}
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-6,marginBottom:4}}>
+          {/* Quick chips for cash */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-6,marginBottom:14}}>
             {[5000,10000,20000,50000,100000].map(v=>(
               <button key={v} onClick={()=>setCashInDrawer(String((Number(cashInDrawer)||0)+v))}
                 style={{padding:"4px 10px",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.pill,fontSize:11,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:F}}>
@@ -2879,6 +2901,31 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
               </button>
             ))}
           </div>
+          <Input
+            label="POS / transfer received"
+            value={posInDrawer}
+            onChange={v=>{setPosInDrawer(v);setErr("");}}
+            type="number"
+            prefix="₦"
+            placeholder="0"
+            hint="Enter the total POS and bank transfer amount."
+          />
+          {/* Quick chips for POS */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-6,marginBottom:4}}>
+            {[5000,10000,20000,50000,100000].map(v=>(
+              <button key={v} onClick={()=>setPosInDrawer(String((Number(posInDrawer)||0)+v))}
+                style={{padding:"4px 10px",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.pill,fontSize:11,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:F}}>
+                +{v>=1000?(v/1000)+"k":v}
+              </button>
+            ))}
+          </div>
+          {/* Combined total preview */}
+          {submittedTotal!==null&&(
+            <div style={{background:T.bg,borderRadius:R.sm,padding:"10px 12px",marginTop:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,color:T.muted,fontFamily:F}}>Total submitted</span>
+              <span style={{fontSize:15,fontWeight:700,color:T.text,fontFamily:F}}>{fmt(submittedTotal)}</span>
+            </div>
+          )}
         </Card>
 
         {/* Live difference preview */}
@@ -2895,8 +2942,10 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:5}}>
               {[
-                ["Cash in drawer",   fmt(Number(cashInDrawer))],
-                ["Recorded (entry)", fmt(recordedCash)],
+                ["Cash submitted",    fmt(submittedCash||0)],
+                ["POS submitted",     fmt(submittedPOS||0)],
+                ["Total submitted",   fmt(submittedTotal||0)],
+                ["Recorded (entry)",  fmt(recordedTotal||0)],
               ].map(([l,v])=>(
                 <div key={l} style={{display:"flex",justifyContent:"space-between"}}>
                   <span style={{fontSize:12,color:T.muted,fontFamily:F}}>{l}</span>
@@ -2934,7 +2983,7 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
         <Btn
           label="Submit remittance"
           onClick={save}
-          disabled={!selectedEntry||cashInDrawer===""}
+          disabled={!selectedEntry||(cashInDrawer===""&&posInDrawer==="")}
           loading={ld}
           size="lg"
           icon="check"
@@ -3495,7 +3544,7 @@ export default function GasLedgerApp() {
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/>}
+        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser}/>}
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
