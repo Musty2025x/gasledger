@@ -2645,7 +2645,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
         </div>
         <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
           <Row icon="plant"  label="Plant name" sub={profile?.displayName} onClick={()=>{ setPlantName(profile?.displayName||""); setNameMsg(""); setSub("plant"); }}/>
-          <Row icon="history" label="Entry history" sub="View and edit all past daily entries" onClick={()=>{ setSub(null); goScreen("history"); }}/>
+          <Row icon="history" label="Entry history" sub="View and edit all past daily entries" onClick={()=>{ setSub(null); window.__setScreen&&window.__setScreen("history"); }}/>
           <Row icon="price"  label="Default cost price"
             sub={profile?.defaultCostPrice
               ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg saved`
