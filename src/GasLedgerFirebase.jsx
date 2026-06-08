@@ -248,10 +248,9 @@ const TopBar = ({title, left, right, dark=true}) => (
 const BottomNav = ({active, onChange, role="owner"}) => {
   const ownerTabs = [
     {id:"dashboard",  icon:"home",     label:"Home"},
-    {id:"entry",      icon:"entry",    label:"Entry"},
+    {id:"entryhub",   icon:"entry",    label:"Entry"},
     {id:"stock",      icon:"truck",    label:"Stock"},
     {id:"expenses",   icon:"cash",     label:"Expenses"},
-    {id:"history",    icon:"history",  label:"History"},
     {id:"settings",   icon:"settings", label:"Settings"},
   ];
   const staffTabs = [
@@ -2638,6 +2637,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
         </div>
         <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
           <Row icon="plant"  label="Plant name" sub={profile?.displayName} onClick={()=>{ setPlantName(profile?.displayName||""); setNameMsg(""); setSub("plant"); }}/>
+          <Row icon="history" label="Entry history" sub="View and edit all past daily entries" onClick={()=>{ setSub(null); window.__setScreen&&window.__setScreen("history"); }}/>
           <Row icon="price"  label="Default cost price"
             sub={profile?.defaultCostPrice
               ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg saved`
@@ -2737,7 +2737,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             }
 
             const handler = window.PaystackPop.setup({
-              key:      "pk_live_YOUR_PAYSTACK_PUBLIC_KEY", // ← replace with your key
+              key:      import.meta.env.VITE_PAYSTACK_PUBLIC_KEY, // ← replace with your key
               email:    user.email,
               amount:   plan.price * 100, // Paystack uses kobo
               currency: "NGN",
@@ -3770,6 +3770,47 @@ const StaffAccountScreen = ({ user, profile, onSignOut, back }) => (
   </div>
 );
 
+// Entry hub — choice between New entry and All entries
+const EntryHubScreen = ({ onNewEntry, onAllEntries, back }) => (
+  <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
+    <TopBar title="Entry" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
+    <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"32px 20px",gap:14}}>
+      <div style={{textAlign:"center",marginBottom:8}}>
+        <div style={{fontSize:15,fontWeight:600,color:T.text,marginBottom:4}}>What would you like to do?</div>
+        <div style={{fontSize:13,color:T.muted}}>Log today's readings or review past entries</div>
+      </div>
+
+      {/* New entry */}
+      <div onClick={onNewEntry} style={{background:T.primary,borderRadius:R.xl,padding:"20px 20px",cursor:"pointer",display:"flex",alignItems:"center",gap:16,transition:"opacity .12s"}}
+        onMouseEnter={e=>e.currentTarget.style.opacity=".9"}
+        onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+        <div style={{width:48,height:48,borderRadius:R.lg,background:"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <Icon n="plus" s={24} c={T.gold}/>
+        </div>
+        <div>
+          <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>New entry</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,.55)",marginTop:2}}>Log today's meter readings, cash and POS sales</div>
+        </div>
+        <Icon n="chevron" s={18} c="rgba(255,255,255,.4)" style={{marginLeft:"auto"}}/>
+      </div>
+
+      {/* All entries */}
+      <div onClick={onAllEntries} style={{background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:R.xl,padding:"20px 20px",cursor:"pointer",display:"flex",alignItems:"center",gap:16,transition:"background .12s"}}
+        onMouseEnter={e=>e.currentTarget.style.background=T.bg}
+        onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+        <div style={{width:48,height:48,borderRadius:R.lg,background:`${T.primary}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <Icon n="history" s={24} c={T.primary}/>
+        </div>
+        <div>
+          <div style={{fontSize:16,fontWeight:700,color:T.text}}>All entries</div>
+          <div style={{fontSize:12,color:T.muted,marginTop:2}}>View and edit all past daily entries</div>
+        </div>
+        <Icon n="chevron" s={18} c={T.muted} style={{marginLeft:"auto"}}/>
+      </div>
+    </div>
+  </div>
+);
+
 // ═══════════════════════════════════════════════════════════════
 export default function GasLedgerApp() {
   const {user, loading:authLd}    = useAuth();
@@ -3931,12 +3972,13 @@ export default function GasLedgerApp() {
     </div>
   );
 
-  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","staffexpense","staffaccount","monthly","expenses"];
+  const mainScreens = ["dashboard","entry","entryhub","pnl","pnl-monthly","history","stock","settings","detail","remittance","staffexpense","staffaccount","monthly","expenses"];
 
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser}/>}
+        {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
@@ -3950,7 +3992,7 @@ export default function GasLedgerApp() {
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
         {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost}/></Gate>}
       </div>
-      {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen==="staffexpense"?"staffexpense":screen==="staffaccount"?"staffaccount":screen} onChange={setScreen} role={role}/>}
+      {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen==="staffexpense"?"staffexpense":screen==="staffaccount"?"staffaccount":screen==="entry"||screen==="history"||(screen==="detail"&&role==="owner")?"entryhub":screen} onChange={setScreen} role={role}/>}
     </Shell>
   );
 }
