@@ -255,9 +255,8 @@ const BottomNav = ({active, onChange, role="owner"}) => {
   ];
   const staffTabs = [
     {id:"dashboard",    icon:"home",     label:"Home"},
-    {id:"entry",        icon:"entry",    label:"Entry"},
+    {id:"entryhub",     icon:"entry",    label:"Entry"},
     {id:"staffexpense", icon:"cash",     label:"Expenses"},
-    {id:"history",      icon:"history",  label:"History"},
     {id:"staffaccount", icon:"settings", label:"Account"},
   ];
   const tabs = role === "staff" ? staffTabs : ownerTabs;
@@ -708,11 +707,10 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
 
         {/* Quick actions — role-aware */}
         <SLabel>Quick actions</SLabel>
-        <div style={{display:"grid",gridTemplateColumns:role==="staff"?"1fr 1fr 1fr":"1fr 1fr",gap:8,marginBottom:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
           {(role==="staff"?[
-            {icon:"entry",   label:"New entry",   fn:goEntry},
-            {icon:"history", label:"All entries",  fn:()=>window.__setScreen&&window.__setScreen("history")},
-            {icon:"cash",    label:"My expenses",  fn:()=>window.__setScreen&&window.__setScreen("staffexpense")},
+            {icon:"entry", label:"New entry",   fn:()=>window.__setScreen&&window.__setScreen("entryhub")},
+            {icon:"cash",   label:"My expenses",  fn:()=>window.__setScreen&&window.__setScreen("staffexpense")},
           ]:[
             {icon:"history",label:"All entries",     fn:()=>window.__setScreen&&window.__setScreen("history")},
             {icon:"pnl",    label:"P&L report",      fn:()=>window.__setScreen&&window.__setScreen("pnl")},
