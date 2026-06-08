@@ -251,7 +251,7 @@ const BottomNav = ({active, onChange, role="owner"}) => {
     {id:"entry",      icon:"entry",    label:"Entry"},
     {id:"stock",      icon:"truck",    label:"Stock"},
     {id:"expenses",   icon:"cash",     label:"Expenses"},
-    {id:"monthly",    icon:"history",  label:"Monthly"},
+    {id:"history",    icon:"history",  label:"History"},
     {id:"settings",   icon:"settings", label:"Settings"},
   ];
   const staffTabs = [
@@ -259,6 +259,7 @@ const BottomNav = ({active, onChange, role="owner"}) => {
     {id:"entry",        icon:"entry",    label:"Entry"},
     {id:"staffexpense", icon:"cash",     label:"Expenses"},
     {id:"history",      icon:"history",  label:"History"},
+    {id:"staffaccount", icon:"settings", label:"Account"},
   ];
   const tabs = role === "staff" ? staffTabs : ownerTabs;
   return (
@@ -706,17 +707,18 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           </Card>
         )}
 
-        {/* Quick actions — staff: New entry + Money only */}
+        {/* Quick actions — role-aware */}
         <SLabel>Quick actions</SLabel>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+        <div style={{display:"grid",gridTemplateColumns:role==="staff"?"1fr 1fr 1fr":"1fr 1fr",gap:8,marginBottom:16}}>
           {(role==="staff"?[
-            {icon:"entry",label:"New entry",fn:goEntry},
-            {icon:"cash", label:"Expenses",    fn:()=>window.__setScreen&&window.__setScreen("staffexpense")},
+            {icon:"entry",   label:"New entry",   fn:goEntry},
+            {icon:"history", label:"All entries",  fn:()=>window.__setScreen&&window.__setScreen("history")},
+            {icon:"cash",    label:"My expenses",  fn:()=>window.__setScreen&&window.__setScreen("staffexpense")},
           ]:[
-            {icon:"history",label:"All entries",  fn:()=>window.__setScreen&&window.__setScreen("history")},
-            {icon:"pnl",    label:"P&L report",   fn:()=>window.__setScreen&&window.__setScreen("pnl")},
-            {icon:"truck",  label:"Stock tracker", fn:()=>window.__setScreen&&window.__setScreen("stock")},
-            {icon:"entry",  label:"New entry",     fn:goEntry},
+            {icon:"history",label:"All entries",     fn:()=>window.__setScreen&&window.__setScreen("history")},
+            {icon:"pnl",    label:"P&L report",      fn:()=>window.__setScreen&&window.__setScreen("pnl")},
+            {icon:"truck",  label:"Stock tracker",   fn:()=>window.__setScreen&&window.__setScreen("stock")},
+            {icon:"history",label:"Monthly summary",  fn:()=>window.__setScreen&&window.__setScreen("monthly")},
           ]).map(a=>(
             <div key={a.label} onClick={a.fn}
               style={{background:T.surface,borderRadius:R.lg,border:`1px solid ${T.border}`,padding:"13px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"background .12s"}}
@@ -3706,6 +3708,68 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, todayExpenses=[] }) => {
   );
 };
 
+// Simple staff account screen — sign out + info
+const StaffAccountScreen = ({ user, profile, onSignOut, back }) => (
+  <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
+    <TopBar title="Account" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
+    <div style={{flex:1,overflow:"auto",padding:"0 0 32px"}}>
+      {/* Profile card */}
+      <div style={{background:T.primary,padding:"24px 20px 28px",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{width:52,height:52,borderRadius:"50%",background:T.gold,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style={{fontSize:20,fontWeight:700,color:"#000"}}>{(user?.email||"?")[0].toUpperCase()}</span>
+        </div>
+        <div>
+          <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>{profile?.displayName||"Staff"}</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,.6)",marginTop:2}}>{user?.email}</div>
+          <div style={{marginTop:6,display:"inline-block",background:"rgba(255,255,255,.12)",borderRadius:R.pill,padding:"2px 10px",fontSize:11,color:"rgba(255,255,255,.7)"}}>Staff account</div>
+        </div>
+      </div>
+
+      {/* Info rows */}
+      <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,marginTop:20}}>
+        <div style={{padding:"12px 20px",background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:14,color:T.muted}}>Plant</span>
+          <span style={{fontSize:14,fontWeight:500,color:T.text}}>{profile?.displayName||"—"}</span>
+        </div>
+        <div style={{padding:"12px 20px",background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:14,color:T.muted}}>Role</span>
+          <span style={{fontSize:14,fontWeight:500,color:T.text}}>Staff</span>
+        </div>
+        <div style={{padding:"12px 20px",background:T.surface,display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:14,color:T.muted}}>Email</span>
+          <span style={{fontSize:13,color:T.muted}}>{user?.email}</span>
+        </div>
+      </div>
+
+      {/* What staff can do */}
+      <div style={{padding:"20px 20px 0"}}>
+        <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.6,marginBottom:10}}>Your access</div>
+        <Card>
+          {[
+            ["Log daily meter entries",     true],
+            ["Record shift expenses",        true],
+            ["View all entries & history",   true],
+            ["View P&L reports",            false],
+            ["Manage stock & deliveries",    false],
+            ["Access settings",              false],
+          ].map(([label,allowed],i,arr)=>(
+            <div key={label} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+              <div style={{width:20,height:20,borderRadius:"50%",background:allowed?`${T.success}15`:`${T.danger}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <Icon n={allowed?"check":"close"} s={10} c={allowed?T.success:T.danger}/>
+              </div>
+              <span style={{fontSize:13,color:allowed?T.text:T.muted}}>{label}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+
+      <div style={{padding:"20px"}}>
+        <Btn label="Sign out" onClick={onSignOut} variant="danger" size="lg" icon="logout"/>
+      </div>
+    </div>
+  </div>
+);
+
 // ═══════════════════════════════════════════════════════════════
 export default function GasLedgerApp() {
   const {user, loading:authLd}    = useAuth();
@@ -3867,7 +3931,7 @@ export default function GasLedgerApp() {
     </div>
   );
 
-  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","staffexpense","monthly","expenses"];
+  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","staffexpense","staffaccount","monthly","expenses"];
 
   return (
     <Shell>
@@ -3881,11 +3945,12 @@ export default function GasLedgerApp() {
         {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
         {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
+        {screen==="staffaccount"&& <StaffAccountScreen user={user} profile={profile} onSignOut={signOutUser} back={()=>setScreen("dashboard")}/> }
         {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} submittedBy={user?.uid} back={()=>setScreen("dashboard")} todayExpenses={standaloneExpenses.filter(e=>e.date===new Date().toISOString().split("T")[0]&&e.submittedBy===user?.uid)}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
         {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost}/></Gate>}
       </div>
-      {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen==="staffexpense"?"staffexpense":screen} onChange={setScreen} role={role}/>}
+      {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen==="staffexpense"?"staffexpense":screen==="staffaccount"?"staffaccount":screen} onChange={setScreen} role={role}/>}
     </Shell>
   );
 }
