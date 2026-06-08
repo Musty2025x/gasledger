@@ -27,14 +27,13 @@ import { getFirestore, collection, doc,
 // Replace with values from Firebase Console →
 // Project Settings → General → Your apps → Web app → SDK setup
 const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID",
 };
-
 
 const app  = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -401,6 +400,38 @@ export const useRemittances = (plantId) => {
   useEffect(() => {
     if (!plantId) return;
     const q = query(remittancesCol(plantId), orderBy("date", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return unsub;
+  }, [plantId]);
+  return { data, loading };
+};
+
+// ═══════════════════════════════════════════════════════════════
+// STANDALONE EXPENSES
+// /plants/{plantId}/standaloneExpenses/{id}
+//   date, category, amount, note, createdAt
+// ═══════════════════════════════════════════════════════════════
+export const standaloneExpensesCol = (plantId) =>
+  collection(db, "plants", plantId, "standaloneExpenses");
+
+export const addStandaloneExpense = async (plantId, exp) => {
+  const { id: _ignore, ...data } = exp;
+  return addDoc(standaloneExpensesCol(plantId), { ...data, createdAt: serverTimestamp() });
+};
+export const updateStandaloneExpense = (plantId, id, data) =>
+  updateDoc(doc(db, "plants", plantId, "standaloneExpenses", id), data);
+export const deleteStandaloneExpense = (plantId, id) =>
+  deleteDoc(doc(db, "plants", plantId, "standaloneExpenses", id));
+
+export const useStandaloneExpenses = (plantId) => {
+  const [data, setData]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!plantId) return;
+    const q = query(standaloneExpensesCol(plantId), orderBy("date", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);

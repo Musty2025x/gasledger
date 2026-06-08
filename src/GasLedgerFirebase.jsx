@@ -8,14 +8,18 @@ import {
   useAuth, useUserProfile,
   useEntries, useDeliveries, usePrices,
   useInvites, useStaffMembers, useRemittances,
-  addEntry       as fbAddEntry,
-  addDelivery    as fbAddDelivery,
-  addPrice       as fbAddPrice,
-  addRemittance  as fbAddRemittance,
-  updateEntry    as fbUpdateEntry,
-  updateDelivery as fbUpdateDelivery,
-  deleteEntry    as fbDeleteEntry,
-  deleteDelivery as fbDeleteDelivery,
+  useStandaloneExpenses,
+  addEntry              as fbAddEntry,
+  addDelivery           as fbAddDelivery,
+  addPrice              as fbAddPrice,
+  addRemittance         as fbAddRemittance,
+  addStandaloneExpense  as fbAddStandaloneExpense,
+  updateStandaloneExpense as fbUpdateStandaloneExpense,
+  deleteStandaloneExpense as fbDeleteStandaloneExpense,
+  updateEntry           as fbUpdateEntry,
+  updateDelivery        as fbUpdateDelivery,
+  deleteEntry           as fbDeleteEntry,
+  deleteDelivery        as fbDeleteDelivery,
   createPlant, createInvite, acceptInvite,
   getPendingInvite, deleteInvite, revokeStaff,
   loginUser, registerUser, resetPassword, signOutUser,
@@ -219,7 +223,15 @@ const ErrBanner = ({msg}) => (
 
 // ── Top bar ──────────────────────────────────────────────────
 const TopBar = ({title, left, right, dark=true}) => (
-  <div style={{background:dark?T.primary:T.surface,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0,borderBottom:dark?"none":`1px solid ${T.border}`}}>
+  <div style={{
+    background: dark ? T.primary : T.surface,
+    paddingTop: "max(12px, env(safe-area-inset-top))",
+    paddingBottom: "12px",
+    paddingLeft: "16px",
+    paddingRight: "16px",
+    display:"flex", alignItems:"center", gap:12, flexShrink:0,
+    borderBottom: dark ? "none" : `1px solid ${T.border}`,
+  }}>
     <div style={{width:36,flexShrink:0}}>{left||null}</div>
     <div style={{flex:1,textAlign:"center",fontSize:16,fontWeight:600,color:dark?"#fff":T.text,fontFamily:F}}>{title}</div>
     <div style={{width:36,flexShrink:0,display:"flex",justifyContent:"flex-end"}}>{right||null}</div>
@@ -229,11 +241,12 @@ const TopBar = ({title, left, right, dark=true}) => (
 // ── Bottom nav ───────────────────────────────────────────────
 const BottomNav = ({active, onChange, role="owner"}) => {
   const ownerTabs = [
-    {id:"dashboard",   icon:"home",     label:"Home"},
-    {id:"entry",       icon:"entry",    label:"Entry"},
-    {id:"stock",       icon:"truck",    label:"Stock"},
-    {id:"monthly",     icon:"history",  label:"Monthly"},
-    {id:"settings",    icon:"settings", label:"Settings"},
+    {id:"dashboard",  icon:"home",     label:"Home"},
+    {id:"entry",      icon:"entry",    label:"Entry"},
+    {id:"stock",      icon:"truck",    label:"Stock"},
+    {id:"expenses",   icon:"cash",     label:"Expenses"},
+    {id:"monthly",    icon:"history",  label:"Monthly"},
+    {id:"settings",   icon:"settings", label:"Settings"},
   ];
   const staffTabs = [
     {id:"dashboard",   icon:"home",     label:"Home"},
@@ -2878,6 +2891,221 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
 // ═══════════════════════════════════════════════════════════════
 // MONTHLY SUMMARY SCREEN
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// EXPENSES SCREEN — standalone expense tracker with date
+// ═══════════════════════════════════════════════════════════════
+const ExpensesScreen = ({ expenses, onAdd, onUpdate, onDelete, back }) => {
+  const CATS = ["Salary","Utility","Maintenance","Repairs","Transport","Miscellaneous","Security","Generator","Office","Rent","Other"];
+
+  const [showModal, setShowModal] = useState(false);
+  const [editing,   setEditing]   = useState(null); // null=new, else expense object
+  const [cat,       setCat]       = useState("");
+  const [amt,       setAmt]       = useState("");
+  const [date,      setDate]      = useState(new Date().toISOString().split("T")[0]);
+  const [note,      setNote]      = useState("");
+  const [err,       setErr]       = useState("");
+  const [ld,        setLd]        = useState(false);
+  const [filterCat, setFilterCat] = useState("All");
+
+  const openNew  = () => { setEditing(null); setCat(""); setAmt(""); setDate(new Date().toISOString().split("T")[0]); setNote(""); setErr(""); setShowModal(true); };
+  const openEdit = (e) => { setEditing(e); setCat(e.category); setAmt(String(e.amount)); setDate(e.date); setNote(e.note||""); setErr(""); setShowModal(true); };
+
+  const save = async () => {
+    if (!cat.trim()) { setErr("Select or enter a category."); return; }
+    if (!amt || Number(amt)<=0) { setErr("Enter a valid amount."); return; }
+    setLd(true); setErr("");
+    try {
+      const data = { date, category:cat.trim(), amount:Number(amt), note:note.trim() };
+      if (editing) { await onUpdate(editing.id, data); }
+      else         { await onAdd(data); }
+      setShowModal(false);
+    } catch(e) { setErr(e.message||"Failed. Try again."); }
+    finally { setLd(false); }
+  };
+
+  const del = async () => {
+    if (!editing) return;
+    if (!window.confirm(`Delete "${editing.category}" expense?`)) return;
+    setLd(true);
+    try { await onDelete(editing.id); setShowModal(false); }
+    finally { setLd(false); }
+  };
+
+  // Filter + group by month
+  const allCats   = ["All", ...Array.from(new Set(expenses.map(e=>e.category))).sort()];
+  const filtered  = filterCat==="All" ? expenses : expenses.filter(e=>e.category===filterCat);
+  const total     = filtered.reduce((s,e)=>s+e.amount, 0);
+
+  // Group by month
+  const byMonth = {};
+  filtered.forEach(e => {
+    const key = e.date?.slice(0,7) || "Unknown";
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(e);
+  });
+  const months = Object.keys(byMonth).sort((a,b)=>b.localeCompare(a));
+
+  const monthLabel = (key) => {
+    if (key==="Unknown") return "Unknown";
+    const d = new Date(key+"-01");
+    return d.toLocaleDateString("en-NG",{month:"long",year:"numeric"});
+  };
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
+      <TopBar title="Expenses" dark={false}
+        left={<BackBtn onClick={back} dark={false}/>}
+        right={
+          <button onClick={openNew} style={{background:T.primary,border:"none",borderRadius:R.md,padding:"6px 11px",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:"#fff"}}>
+            <Icon n="plus" s={14} c="#fff"/>
+            <span style={{fontSize:12,fontWeight:600,fontFamily:F}}>Add</span>
+          </button>
+        }
+      />
+
+      {/* Summary bar */}
+      <div style={{background:T.primary,padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,.5)",fontFamily:F}}>{filterCat==="All"?"All categories":filterCat} · {filtered.length} expense{filtered.length!==1?"s":""}</div>
+          <div style={{fontSize:18,fontWeight:700,color:T.gold,fontFamily:F}}>−{fmt(total)}</div>
+        </div>
+      </div>
+
+      {/* Category filter chips */}
+      <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"8px 12px",overflowX:"auto",display:"flex",gap:6,flexShrink:0,WebkitOverflowScrolling:"touch"}}>
+        {allCats.map(c=>(
+          <button key={c} onClick={()=>setFilterCat(c)}
+            style={{flexShrink:0,padding:"5px 12px",background:filterCat===c?T.primary:T.bg2,color:filterCat===c?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:11,fontWeight:filterCat===c?600:400,cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",transition:"all .15s"}}>
+            {c}
+          </button>
+        ))}
+      </div>
+
+      <div style={{flex:1,overflow:"auto",padding:"12px 16px 24px"}}>
+        {filtered.length===0 ? (
+          <div style={{textAlign:"center",padding:"48px 0",color:T.muted,fontSize:13}}>
+            {expenses.length===0 ? "No expenses yet. Tap Add to record one." : "No expenses in this category."}
+          </div>
+        ) : (
+          months.map(mKey=>(
+            <div key={mKey}>
+              {/* Month header */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"12px 0 8px"}}>
+                <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.7}}>{monthLabel(mKey)}</span>
+                <span style={{fontSize:12,fontWeight:700,color:T.danger}}>−{fmt(byMonth[mKey].reduce((s,e)=>s+e.amount,0))}</span>
+              </div>
+              <Card>
+                {byMonth[mKey].map((e,i,arr)=>(
+                  <div key={e.id} onClick={()=>openEdit(e)}
+                    style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .12s"}}
+                    onMouseEnter={ev=>ev.currentTarget.style.background=T.bg}
+                    onMouseLeave={ev=>ev.currentTarget.style.background="transparent"}>
+                    {/* Category badge */}
+                    <div style={{width:40,height:40,borderRadius:R.md,background:`${T.danger}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={{fontSize:11,fontWeight:700,color:T.danger,fontFamily:F}}>{e.category.slice(0,2).toUpperCase()}</span>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{e.category}</div>
+                      <div style={{fontSize:11,color:T.muted,marginTop:2,display:"flex",gap:8}}>
+                        <span>{fmtD(e.date)}</span>
+                        {e.note&&<span style={{fontStyle:"italic"}}>· {e.note}</span>}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:14,fontWeight:700,color:T.danger}}>−{fmt(e.amount)}</div>
+                      <div style={{fontSize:10,color:T.muted,marginTop:1}}>tap to edit</div>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          ))
+        )}
+        <div style={{height:16}}/>
+      </div>
+
+      {/* Add / Edit modal */}
+      {showModal&&(
+        <div style={{position:"absolute",inset:0,background:T.overlay,display:"flex",alignItems:"flex-end",zIndex:200}}>
+          <div style={{background:T.surface,borderRadius:"16px 16px 0 0",padding:"20px 16px 32px",width:"100%",maxHeight:"88%",overflowY:"auto",fontFamily:F}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <span style={{fontSize:16,fontWeight:600,color:T.text}}>{editing?"Edit expense":"New expense"}</span>
+              <button onClick={()=>setShowModal(false)} style={{background:T.bg2,border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <Icon n="close" s={14} c={T.muted}/>
+              </button>
+            </div>
+
+            {/* Date */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Date</div>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+              style={{width:"100%",padding:"11px 12px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box",marginBottom:14}}
+              onFocus={e=>e.target.style.borderColor=T.primary}
+              onBlur={e=>e.target.style.borderColor=T.borderMid}
+            />
+
+            {/* Category */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Category</div>
+            <input value={cat} onChange={e=>{setCat(e.target.value);setErr("");}} placeholder="e.g. Salary"
+              style={{width:"100%",padding:"11px 12px",border:`1.5px solid ${err&&!cat?T.danger:T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box",marginBottom:8}}
+              onFocus={e=>e.target.style.borderColor=T.primary}
+              onBlur={e=>e.target.style.borderColor=err&&!cat?T.danger:T.borderMid}
+            />
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
+              {CATS.map(c=>(
+                <button key={c} onClick={()=>{setCat(c);setErr("");}}
+                  style={{padding:"4px 10px",background:cat===c?T.primary:T.bg2,color:cat===c?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:F,transition:"all .12s"}}>
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            {/* Amount */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Amount</div>
+            <div style={{position:"relative",marginBottom:8}}>
+              <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,color:T.muted,pointerEvents:"none"}}>₦</span>
+              <input value={amt} onChange={e=>{setAmt(e.target.value);setErr("");}} type="number" placeholder="0"
+                style={{width:"100%",padding:"11px 12px 11px 28px",border:`1.5px solid ${err&&!amt?T.danger:T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.primary}
+                onBlur={e=>e.target.style.borderColor=err&&!amt?T.danger:T.borderMid}
+              />
+            </div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
+              {[5000,10000,15000,20000,50000,100000].map(v=>(
+                <button key={v} onClick={()=>{setAmt(String(v));setErr("");}}
+                  style={{padding:"4px 10px",background:Number(amt)===v?T.primary:T.bg2,color:Number(amt)===v?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:F}}>
+                  {v>=1000?(v/1000)+"k":v}
+                </button>
+              ))}
+            </div>
+
+            {/* Note */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Note (optional)</div>
+            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. Monthly salary for Musa"
+              style={{width:"100%",padding:"11px 12px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box",marginBottom:14}}
+              onFocus={e=>e.target.style.borderColor=T.primary}
+              onBlur={e=>e.target.style.borderColor=T.borderMid}
+            />
+
+            {err&&<div style={{background:`${T.danger}10`,borderRadius:R.sm,padding:"8px 12px",marginBottom:12,fontSize:12,color:T.danger}}>{err}</div>}
+
+            <div style={{display:"flex",gap:8}}>
+              {editing&&(
+                <button onClick={del} disabled={ld} style={{padding:"13px 16px",background:"#fee2e2",border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:T.danger,cursor:"pointer",fontFamily:F,flexShrink:0}}>
+                  Delete
+                </button>
+              )}
+              <button onClick={save} disabled={ld} style={{flex:1,padding:"13px",background:ld?T.bg2:T.primary,border:"none",borderRadius:R.md,fontSize:14,fontWeight:600,color:ld?T.muted:"#fff",cursor:ld?"default":"pointer",fontFamily:F}}>
+                {ld?"Saving…":editing?"Save changes":"Add expense"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
 const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice }) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
@@ -3027,10 +3255,11 @@ export default function GasLedgerApp() {
   const plantId = profile?.plantId;
   const isStaff = role === "staff";
 
-  const {data:entries,      loading:eLd} = useEntries(plantId);
-  const {data:deliveries,   loading:dLd} = useDeliveries(plantId);
-  const {data:prices,       loading:pLd} = usePrices(plantId);
-  const {data:remittances              } = useRemittances(plantId);
+  const {data:entries,         loading:eLd} = useEntries(plantId);
+  const {data:deliveries,      loading:dLd} = useDeliveries(plantId);
+  const {data:prices,          loading:pLd} = usePrices(plantId);
+  const {data:remittances              }    = useRemittances(plantId);
+  const {data:standaloneExpenses       }    = useStandaloneExpenses(plantId);
 
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
@@ -3039,7 +3268,10 @@ export default function GasLedgerApp() {
   const addEntry      = useCallback(e   => fbAddEntry(plantId,e),         [plantId]);
   const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
   const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
-  const addRemittance = useCallback(r   => fbAddRemittance(plantId,r),    [plantId]);
+  const addRemittance      = useCallback(r   => fbAddRemittance(plantId,r),             [plantId]);
+  const addExpense         = useCallback(e   => fbAddStandaloneExpense(plantId,e),      [plantId]);
+  const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId,id,d),[plantId]);
+  const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId,id),  [plantId]);
   const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
   const updateDelivery= useCallback((id,d) => fbUpdateDelivery(plantId,id,d),[plantId]);
   const deleteEntry   = useCallback(id  => fbDeleteEntry(plantId,id),     [plantId]);
@@ -3148,7 +3380,7 @@ export default function GasLedgerApp() {
     </div>
   );
 
-  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","monthly"];
+  const mainScreens = ["dashboard","entry","pnl","pnl-monthly","history","stock","settings","detail","remittance","monthly","expenses"];
 
   return (
     <Shell>
@@ -3158,6 +3390,7 @@ export default function GasLedgerApp() {
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey}/></Gate>}
+        {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
         {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
