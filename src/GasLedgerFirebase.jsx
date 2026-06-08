@@ -2234,6 +2234,11 @@ const SettingsSubScreen = ({ title, onBack, children }) => (
 // ═══════════════════════════════════════════════════════════════
 const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0 }) => {
   const role = profile?.role || "owner";
+  // ── Billing state (Paystack — not yet active) ────────────
+  const [billingLd,  setBillingLd]  = useState("");
+  const [billingErr, setBillingErr] = useState("");
+  const [billingOk,  setBillingOk]  = useState("");
+
   // sub-screens: null | "plant" | "email" | "password" | "staff" | "cost"
   const [sub,        setSub]       = useState(null);
 
@@ -2322,6 +2327,13 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     } catch(e) { setPwErr(errMap(e.code)); }
     finally { setPwLd(false); }
   };
+
+  // ── Invite / staff management state ─────────────────────
+  const [inviteEmail,   setInviteEmail]   = useState("");
+  const [inviteLd,      setInviteLd]      = useState(false);
+  const [inviteErr,     setInviteErr]     = useState("");
+  const [inviteOk,      setInviteOk]      = useState("");
+  const [confirmAction, setConfirmAction] = useState(null);
 
   // ── shared sub-screen shell — defined outside to prevent remount ──
   const backFromSub = useCallback(() => {
@@ -2418,11 +2430,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
 
   // ── Staff management state ───────────────────────────────
   // invites and staffMembers now passed as props from Root (avoids duplicate Firestore listeners)
-  const [inviteEmail,  setInviteEmail]  = useState("");
-  const [inviteLd,     setInviteLd]     = useState(false);
-  const [inviteErr,    setInviteErr]    = useState("");
-  const [inviteOk,     setInviteOk]     = useState("");
-  const [confirmAction, setConfirmAction] = useState(null); // {type,uid,email,inviteId}
+
 
   const sendInvite = async () => {
     if (!inviteEmail.trim()) return;
@@ -2718,9 +2726,6 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
           ];
 
           const currentPlan = getPlan(profile);
-          const [billingLd,  setBillingLd]  = useState(false);
-          const [billingErr, setBillingErr] = useState("");
-          const [billingOk,  setBillingOk]  = useState("");
 
           const handleUpgrade = async (plan) => {
             if (plan.id === "free") return;
@@ -2737,7 +2742,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             }
 
             const handler = window.PaystackPop.setup({
-              key:      import.meta.env.VITE_PAYSTACK_PUBLIC_KEY, // ← replace with your key
+              key:      "pk_test_01f4b870cfd12f3a9bab18aab50a10afd4518cb9", // ← replace with your key
               email:    user.email,
               amount:   plan.price * 100, // Paystack uses kobo
               currency: "NGN",
