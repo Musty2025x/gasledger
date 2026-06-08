@@ -1506,8 +1506,8 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standalon
   // Merged totals — add standalone expenses to entry-level expenses
   const mergedTotals = {
     ...totals,
-    exp:    mergedTotals.exp    + standaloneTotal,
-    profit: mergedTotals.profit - standaloneTotal,
+    exp:    totals.exp    + standaloneTotal,
+    profit: totals.profit - standaloneTotal,
   };
 
   const margin      = mergedTotals.rev>0  ? Math.round((mergedTotals.profit/mergedTotals.rev)*100)  : 0;
