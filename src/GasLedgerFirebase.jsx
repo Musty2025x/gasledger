@@ -25,6 +25,11 @@ import {
   loginUser, registerUser, resetPassword, signOutUser,
 } from "./firebase.js";
 
+// ── Billing stubs (Paystack not yet active) ──────────────────
+const getPlan      = (profile) => profile?.plan || "free";
+const fbUpdatePlan = async () => {};
+
+
 // ── Tokens ───────────────────────────────────────────────────
 const T = {
   primary:  "#0d3b2e", p2: "#145c44", p3: "#1a7a5a",
@@ -673,7 +678,7 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
         <SLabel>7-day summary</SLabel>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
           {(role==="staff"?[
-            {l:"Gas dispensed",v:fmtKg(totals.gas), vc:T.text,bg:T.primary,sub:`avg ${fmtKg(Math.round(totals.gas/Math.max(1,Math.min(7,entries.length))))} /day`},
+            {l:"Gas dispensed",v:fmtKg(totals.gas), vc:T.gold,bg:T.primary,sub:`avg ${fmtKg(Math.round(totals.gas/Math.max(1,Math.min(7,entries.length))))} /day`},
             {l:"Total sales",  v:fmt(totals.rev),   vc:T.text,bg:T.surface,sub:"cash + POS"},
           ]:[
             {l:"Revenue",     v:fmt(totals.rev),    vc:T.gold,                             bg:T.primary,sub:"all days"},
@@ -2617,7 +2622,9 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             <div>
               <div style={{fontSize:16,fontWeight:600,color:"#fff",fontFamily:F}}>{profile?.displayName||"Your Plant"}</div>
               <div style={{fontSize:12,color:"rgba(255,255,255,.55)",fontFamily:F,marginTop:3}}>{user?.email}</div>
-              <div style={{marginTop:6,display:"inline-block",background:`${T.gold}25`,borderRadius:R.pill,padding:"2px 10px",fontSize:11,fontWeight:600,color:T.gold}}>Free plan</div>
+              <div style={{marginTop:6,display:"inline-block",background:`${T.gold}25`,borderRadius:R.pill,padding:"2px 10px",fontSize:11,fontWeight:600,color:T.gold}}>
+                {getPlan(profile)==="pro"?"Pro plan":getPlan(profile)==="basic"?"Basic plan":"Free plan"}
+              </div>
             </div>
           </div>
         </div>
@@ -2658,34 +2665,203 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
           <Row icon="lock"   label="Password"       sub="Change your password" onClick={()=>{ setCurPw(""); setNewPw(""); setConfPw(""); setPwErr(""); setPwOk(false); setSub("password"); }}/>
         </div>
 
-        {/* Plan section */}
-        <div style={{padding:"20px 16px 6px"}}>
-          <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.7,fontFamily:F}}>Plan</span>
-        </div>
-        <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
-          {/* Plan info tile */}
-          <div style={{background:T.surface,padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:600,color:T.text,fontFamily:F}}>Free plan</div>
-                <div style={{fontSize:12,color:T.muted,fontFamily:F,marginTop:2}}>All features included during beta</div>
-              </div>
-              <span style={{background:`${T.success}15`,color:T.success,fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:R.pill,fontFamily:F}}>Active</span>
+        {/* ── Plan & Billing section ─────────────────────── */}
+        {(()=>{
+          const PLANS = [
+            {
+              id:    "free",
+              name:  "Free",
+              price: 0,
+              tag:   "Beta",
+              color: T.muted,
+              features: [
+                "Dashboard & stock summary",
+                "Daily entry logging",
+                "P&L reports with PDF export",
+                "Stock & refill tracker",
+                "Up to 1 staff member",
+              ],
+            },
+            {
+              id:    "basic",
+              name:  "Basic",
+              price: 2000,
+              tag:   "Popular",
+              color: T.primary,
+              features: [
+                "Everything in Free",
+                "Up to 3 staff members",
+                "WhatsApp share reports",
+                "Expense tracker",
+                "Monthly summary",
+                "Priority support",
+              ],
+            },
+            {
+              id:    "pro",
+              name:  "Pro",
+              price: 5000,
+              tag:   "Best value",
+              color: T.gold,
+              features: [
+                "Everything in Basic",
+                "Unlimited staff members",
+                "Multi-plant management",
+                "Credit customer tracking",
+                "Push notifications",
+                "Custom PDF branding",
+              ],
+            },
+          ];
+
+          const currentPlan = getPlan(profile);
+          const [billingLd,  setBillingLd]  = useState(false);
+          const [billingErr, setBillingErr] = useState("");
+          const [billingOk,  setBillingOk]  = useState("");
+
+          const handleUpgrade = async (plan) => {
+            if (plan.id === "free") return;
+            setBillingLd(plan.id); setBillingErr(""); setBillingOk("");
+
+            // Load Paystack inline script dynamically
+            if (!window.PaystackPop) {
+              await new Promise((res,rej) => {
+                const s = document.createElement("script");
+                s.src = "https://js.paystack.co/v1/inline.js";
+                s.onload = res; s.onerror = rej;
+                document.head.appendChild(s);
+              });
+            }
+
+            const handler = window.PaystackPop.setup({
+              key:      "pk_live_YOUR_PAYSTACK_PUBLIC_KEY", // ← replace with your key
+              email:    user.email,
+              amount:   plan.price * 100, // Paystack uses kobo
+              currency: "NGN",
+              ref:      `GASLEDGER-${user.uid.slice(0,8).toUpperCase()}-${Date.now()}`,
+              metadata: {
+                uid:     user.uid,
+                plantId: plantId,
+                plan:    plan.id,
+                email:   user.email,
+              },
+              callback: async (response) => {
+                // Payment successful — update plan in Firestore
+                try {
+                  await fbUpdatePlan(user.uid, plantId, plan.id, response.reference);
+                  setBillingOk(`Upgraded to ${plan.name}! Your plan is now active.`);
+                } catch(e) {
+                  setBillingErr("Payment received but plan update failed. Contact support.");
+                } finally { setBillingLd(""); }
+              },
+              onClose: () => { setBillingLd(""); },
+            });
+            handler.openIframe();
+          };
+
+          return (<>
+            <div style={{padding:"20px 16px 6px"}}>
+              <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.7,fontFamily:F}}>Plan & Billing</span>
             </div>
-            {/* Feature list */}
-            {["Dashboard & stock summary","Daily entry logging","P&L reports with date ranges","PDF export & WhatsApp share","Stock & refill tracker","Staff access (invite by email)"].map(f=>(
-              <div key={f} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <div style={{width:16,height:16,borderRadius:"50%",background:`${T.success}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <Icon n="check" s={10} c={T.success}/>
+            <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
+
+              {/* Current plan banner */}
+              <div style={{background:T.surface,padding:"14px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:F}}>
+                    {PLANS.find(p=>p.id===currentPlan)?.name||"Free"} plan
+                  </div>
+                  <div style={{fontSize:12,color:T.muted,fontFamily:F,marginTop:2}}>
+                    {currentPlan==="free" ? "All features free during beta" : `₦${PLANS.find(p=>p.id===currentPlan)?.price?.toLocaleString("en-NG")}/month`}
+                  </div>
                 </div>
-                <span style={{fontSize:12,color:T.text2,fontFamily:F}}>{f}</span>
+                <span style={{background:`${T.success}15`,color:T.success,fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:R.pill,fontFamily:F}}>Active</span>
               </div>
-            ))}
-            <div style={{marginTop:12,padding:"10px 12px",background:`${T.primary}08`,borderRadius:R.md,fontSize:12,color:T.muted,fontFamily:F,lineHeight:1.5}}>
-              Paid plans with subscription billing and multi-plant management coming soon.
+
+              {/* Plan cards */}
+              <div style={{padding:"14px 16px 4px",display:"flex",flexDirection:"column",gap:10}}>
+                {PLANS.map(plan=>{
+                  const isActive  = currentPlan === plan.id;
+                  const isPaid    = plan.price > 0;
+                  const isLoading = billingLd === plan.id;
+                  return (
+                    <div key={plan.id} style={{
+                      background: isActive ? `${T.primary}08` : T.surface,
+                      border: `${isActive?"2px":"1px"} solid ${isActive?T.primary:T.border}`,
+                      borderRadius: R.lg,
+                      padding: "14px",
+                      transition: "border-color .15s",
+                    }}>
+                      {/* Plan header */}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                        <div>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{fontSize:16,fontWeight:700,color:T.text,fontFamily:F}}>{plan.name}</span>
+                            <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:R.pill,
+                              background: plan.id==="pro"?`${T.gold}20`:plan.id==="basic"?`${T.primary}12`:T.bg2,
+                              color:      plan.id==="pro"?T.gold:plan.id==="basic"?T.primary:T.muted,
+                              fontFamily:F}}>
+                              {plan.tag}
+                            </span>
+                          </div>
+                          <div style={{fontSize:18,fontWeight:800,color:plan.id==="pro"?T.gold:T.primary,fontFamily:F,marginTop:4}}>
+                            {plan.price===0 ? "Free" : `₦${plan.price.toLocaleString("en-NG")}`}
+                            {plan.price>0&&<span style={{fontSize:12,fontWeight:400,color:T.muted}}>/month</span>}
+                          </div>
+                        </div>
+                        {isActive && (
+                          <div style={{width:24,height:24,borderRadius:"50%",background:T.primary,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <Icon n="check" s={13} c="#fff"/>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Features */}
+                      <div style={{marginBottom:12}}>
+                        {plan.features.map(f=>(
+                          <div key={f} style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
+                            <Icon n="check" s={12} c={isActive?T.primary:T.muted}/>
+                            <span style={{fontSize:12,color:isActive?T.text:T.muted,fontFamily:F}}>{f}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* CTA */}
+                      {isActive ? (
+                        <div style={{padding:"8px 12px",background:`${T.primary}10`,borderRadius:R.md,fontSize:12,fontWeight:600,color:T.primary,textAlign:"center",fontFamily:F}}>
+                          ✓ Current plan
+                        </div>
+                      ) : (
+                        <button
+                          onClick={()=>handleUpgrade(plan)}
+                          disabled={!!billingLd}
+                          style={{
+                            width:"100%",padding:"10px",
+                            background: plan.id==="pro" ? T.gold : T.primary,
+                            border:"none",borderRadius:R.md,
+                            fontSize:13,fontWeight:600,
+                            color: plan.id==="pro" ? "#000" : "#fff",
+                            cursor: billingLd?"default":"pointer",
+                            opacity: billingLd&&!isLoading?0.5:1,
+                            fontFamily:F,
+                          }}>
+                          {isLoading ? "Opening payment…" : `Upgrade to ${plan.name} — ₦${plan.price.toLocaleString("en-NG")}/mo`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {billingErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"10px 12px",fontSize:13,color:T.danger,fontFamily:F}}>{billingErr}</div>}
+                {billingOk &&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"10px 12px",fontSize:13,color:T.success,fontFamily:F}}>{billingOk}</div>}
+
+                <div style={{fontSize:11,color:T.muted,textAlign:"center",lineHeight:1.6,paddingBottom:8,fontFamily:F}}>
+                  Payments secured by Paystack. Cancel anytime.
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>);
+        })()}
 
         {/* About section */}
         <div style={{padding:"20px 16px 6px"}}>
