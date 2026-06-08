@@ -2232,7 +2232,16 @@ const SettingsSubScreen = ({ title, onBack, children }) => (
 // ═══════════════════════════════════════════════════════════════
 const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0 }) => {
   const role = profile?.role || "owner";
-  // ── Billing state (Paystack — not yet active) ────────────
+  // ── Load Paystack script on mount ────────────────────────
+  useEffect(() => {
+    if (window.PaystackPop) return;
+    const s = document.createElement("script");
+    s.src = "https://js.paystack.co/v1/inline.js";
+    s.async = true;
+    document.head.appendChild(s);
+  }, []);
+
+  // ── Billing state ─────────────────────────────────────────
   const [billingLd,  setBillingLd]  = useState("");
   const [billingErr, setBillingErr] = useState("");
   const [billingOk,  setBillingOk]  = useState("");
@@ -2725,40 +2734,23 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
 
           const currentPlan = getPlan(profile);
 
-          const handleUpgrade = async (plan) => {
+          const handleUpgrade = (plan) => {
             if (plan.id === "free") return;
-            setBillingLd(plan.id); setBillingErr(""); setBillingOk("");
-
-            // Load Paystack inline script dynamically
             if (!window.PaystackPop) {
-              await new Promise((res,rej) => {
-                const s = document.createElement("script");
-                s.src = "https://js.paystack.co/v1/inline.js";
-                s.onload = res; s.onerror = rej;
-                document.head.appendChild(s);
-              });
+              setBillingErr("Payment system still loading. Please wait a moment and try again.");
+              return;
             }
-
+            setBillingLd(plan.id); setBillingErr(""); setBillingOk("");
             const handler = window.PaystackPop.setup({
-              key:      "pk_test_01f4b870cfd12f3a9bab18aab50a10afd4518cb9", // ← replace with your key
+              key:      "pk_test_01f4b870cfd12f3a9bab18aab50a10afd4518cb9",
               email:    user.email,
-              amount:   plan.price * 100, // Paystack uses kobo
+              amount:   plan.price * 100,
               currency: "NGN",
               ref:      `GASLEDGER-${user.uid.slice(0,8).toUpperCase()}-${Date.now()}`,
-              metadata: {
-                uid:     user.uid,
-                plantId: plantId,
-                plan:    plan.id,
-                email:   user.email,
-              },
-              callback: async (response) => {
-                // Payment successful — update plan in Firestore
-                try {
-                  await fbUpdatePlan(user.uid, plantId, plan.id, response.reference);
-                  setBillingOk(`Upgraded to ${plan.name}! Your plan is now active.`);
-                } catch(e) {
-                  setBillingErr("Payment received but plan update failed. Contact support.");
-                } finally { setBillingLd(""); }
+              metadata: { uid:user.uid, plantId, plan:plan.id, email:user.email },
+              callback: (response) => {
+                setBillingLd("");
+                setBillingOk(`Payment received! Reference: ${response.reference}. Your plan will be updated shortly.`);
               },
               onClose: () => { setBillingLd(""); },
             });
