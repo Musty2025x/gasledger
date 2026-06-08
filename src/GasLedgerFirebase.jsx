@@ -2220,7 +2220,7 @@ const SettingsSubScreen = ({ title, onBack, children }) => (
 // ═══════════════════════════════════════════════════════════════
 // SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════════════
-const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
+const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0 }) => {
   const role = profile?.role || "owner";
   // sub-screens: null | "plant" | "email" | "password" | "staff" | "cost"
   const [sub,        setSub]       = useState(null);
@@ -2230,8 +2230,9 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
   const [savingName, setSavingName]= useState(false);
   const [nameMsg,    setNameMsg]   = useState("");
 
-  // Default cost price
-  const [defCost,    setDefCost]   = useState(String(profile?.defaultCostPrice||""));
+  // Default cost price — use profile value if set, otherwise fall back to latest delivery cost
+  const initCost = profile?.defaultCostPrice || liveCost || "";
+  const [defCost,    setDefCost]   = useState(String(initCost || ""));
   const [costMsg,    setCostMsg]   = useState("");
   const [savingCost, setSavingCost]= useState(false);
 
@@ -2404,8 +2405,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
   );
 
   // ── Staff management state ───────────────────────────────
-  const { invites }              = useInvites(plantId);
-  const { staff: staffMembers }  = useStaffMembers(plantId);
+  // invites and staffMembers now passed as props from Root (avoids duplicate Firestore listeners)
   const [inviteEmail,  setInviteEmail]  = useState("");
   const [inviteLd,     setInviteLd]     = useState(false);
   const [inviteErr,    setInviteErr]    = useState("");
@@ -2525,7 +2525,11 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
         Set the default purchase price per kg from your supplier. This is used to calculate gross profit and COGS across all P&L reports.
       </p>
       <div style={{background:`${T.primary}08`,borderRadius:R.md,padding:"10px 14px",marginBottom:16,fontSize:12,color:T.muted,fontFamily:F}}>
-        Current: {profile?.defaultCostPrice ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg` : "Not set — using ₦0"}
+        Current: {profile?.defaultCostPrice
+          ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg (saved)`
+          : liveCost > 0
+          ? `₦${Number(liveCost).toLocaleString("en-NG")}/kg (from latest delivery — tap Save to lock in)`
+          : "Not set — affects P&L accuracy"}
       </div>
       <Input label="Cost price per kg" value={defCost} onChange={v=>{setDefCost(v);setCostMsg("");}} type="number" prefix="₦" placeholder="e.g. 1600" hint="This auto-fills deliveries and P&L cost calculations." onEnter={saveDefCost}/>
       {costMsg&&(
@@ -2582,11 +2586,22 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
         <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
           <Row icon="plant"  label="Plant name" sub={profile?.displayName} onClick={()=>{ setPlantName(profile?.displayName||""); setNameMsg(""); setSub("plant"); }}/>
           <Row icon="price"  label="Default cost price"
-            sub={profile?.defaultCostPrice ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg purchase price` : "Not set — affects P&L accuracy"}
-            onClick={()=>{ setDefCost(String(profile?.defaultCostPrice||"")); setCostMsg(""); setSub("cost"); }}/>
+            sub={profile?.defaultCostPrice
+              ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg saved`
+              : liveCost > 0
+              ? `₦${Number(liveCost).toLocaleString("en-NG")}/kg from latest delivery — tap to save`
+              : "Not set — affects P&L accuracy"}
+            onClick={()=>{ setDefCost(String(profile?.defaultCostPrice||liveCost||"")); setCostMsg(""); setSub("cost"); }}/>
           {role==="owner"&&(
             <Row icon="people" label="Staff access"
-              sub={staffMembers.length>0?`${staffMembers.length} active staff member${staffMembers.length!==1?"s":""}`:invites.filter(i=>i.status==="pending").length>0?"Pending invite":"No staff yet"}
+              sub={(()=>{
+                const active  = staffMembers.length;
+                const pending = invites.filter(i=>i.status==="pending").length;
+                if (active > 0 && pending > 0) return `${active} active · ${pending} pending invite${pending!==1?"s":""}`;
+                if (active > 0) return `${active} active staff member${active!==1?"s":""}`;
+                if (pending > 0) return `${pending} pending invite${pending!==1?"s":""} — waiting for staff to sign up`;
+                return "No staff yet";
+              })()}
               onClick={()=>{ setInviteEmail(""); setInviteErr(""); setInviteOk(""); setSub("staff"); }}/>
           )}
         </div>
@@ -3315,6 +3330,8 @@ export default function GasLedgerApp() {
   const {data:prices,          loading:pLd} = usePrices(plantId);
   const {data:remittances              }    = useRemittances(plantId);
   const {data:standaloneExpenses       }    = useStandaloneExpenses(plantId);
+  const {invites                       }    = useInvites(plantId);
+  const {staff: staffMembers           }    = useStaffMembers(plantId);
 
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
@@ -3450,7 +3467,7 @@ export default function GasLedgerApp() {
         {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
-        {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser}/></Gate>}
+        {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost}/></Gate>}
       </div>
       {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen} onChange={setScreen} role={role}/>}
     </Shell>
