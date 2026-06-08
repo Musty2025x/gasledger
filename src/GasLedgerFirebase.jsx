@@ -2410,6 +2410,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
   const [inviteLd,     setInviteLd]     = useState(false);
   const [inviteErr,    setInviteErr]    = useState("");
   const [inviteOk,     setInviteOk]     = useState("");
+  const [confirmAction, setConfirmAction] = useState(null); // {type,uid,email,inviteId}
 
   const sendInvite = async () => {
     if (!inviteEmail.trim()) return;
@@ -2423,16 +2424,27 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     } finally { setInviteLd(false); }
   };
 
-  const handleRevoke = async (staffUid, staffEmail) => {
-    if (!window.confirm(`Remove ${staffEmail} from this plant?`)) return;
-    try { await revokeStaff(staffUid); }
-    catch(e) { alert(e.message); }
+  const handleRevoke = (staffUid, staffEmail) => {
+    setConfirmAction({ type:"revoke", uid:staffUid, email:staffEmail });
   };
 
-  const handleDeleteInvite = async (inviteId, email) => {
-    if (!window.confirm(`Cancel invite for ${email}?`)) return;
-    try { await deleteInvite(inviteId); }
-    catch(e) { alert(e.message); }
+  const handleDeleteInvite = (inviteId, email) => {
+    setConfirmAction({ type:"cancel", inviteId, email });
+  };
+
+  const executeConfirm = async () => {
+    if (!confirmAction) return;
+    try {
+      if (confirmAction.type === "revoke") {
+        await revokeStaff(confirmAction.uid);
+      } else {
+        await deleteInvite(confirmAction.inviteId);
+      }
+    } catch(e) {
+      setInviteErr(e.message || "Action failed. Try again.");
+    } finally {
+      setConfirmAction(null);
+    }
   };
 
   // ── Staff sub-screen ─────────────────────────────────────
@@ -2513,6 +2525,32 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
       {staffMembers.length===0 && invites.filter(i=>i.status==="pending").length===0 && (
         <div style={{textAlign:"center",padding:"32px 0",color:T.muted,fontSize:13}}>
           No staff yet. Send an invite above.
+        </div>
+      )}
+
+      {/* In-app confirm dialog — replaces window.confirm (blocked on iOS PWA) */}
+      {confirmAction&&(
+        <div style={{position:"absolute",inset:0,background:T.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:24}}>
+          <div style={{background:T.surface,borderRadius:R.lg,padding:24,width:"100%",maxWidth:340,fontFamily:F}}>
+            <div style={{fontSize:16,fontWeight:600,color:T.text,marginBottom:10}}>
+              {confirmAction.type==="revoke" ? "Remove staff member?" : "Cancel invite?"}
+            </div>
+            <div style={{fontSize:13,color:T.muted,lineHeight:1.6,marginBottom:20}}>
+              {confirmAction.type==="revoke"
+                ? `${confirmAction.email} will lose access to this plant immediately.`
+                : `The pending invite for ${confirmAction.email} will be cancelled.`}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setConfirmAction(null)}
+                style={{flex:1,padding:"11px",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.md,fontSize:14,fontWeight:500,color:T.text,cursor:"pointer",fontFamily:F}}>
+                Keep
+              </button>
+              <button onClick={executeConfirm}
+                style={{flex:1,padding:"11px",background:T.danger,border:"none",borderRadius:R.md,fontSize:14,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F}}>
+                {confirmAction.type==="revoke" ? "Remove" : "Cancel invite"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </SettingsSubScreen>
