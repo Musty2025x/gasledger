@@ -2637,7 +2637,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
         </div>
         <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
           <Row icon="plant"  label="Plant name" sub={profile?.displayName} onClick={()=>{ setPlantName(profile?.displayName||""); setNameMsg(""); setSub("plant"); }}/>
-          <Row icon="history" label="Entry history" sub="View and edit all past daily entries" onClick={()=>{ setSub(null); window.__setScreen&&window.__setScreen("history"); }}/>
+          <Row icon="history" label="Entry history" sub="View and edit all past daily entries" onClick={()=>{ setSub(null); goScreen("history"); }}/>
           <Row icon="price"  label="Default cost price"
             sub={profile?.defaultCostPrice
               ? `₦${Number(profile.defaultCostPrice).toLocaleString("en-NG")}/kg saved`
@@ -3817,7 +3817,11 @@ export default function GasLedgerApp() {
   const {profile, loading:profLd} = useUserProfile(user?.uid);
 
   const [screen,        setScreen]        = useState("dashboard");
+  const [prevScreen,    setPrevScreen]     = useState("dashboard");
   const [detail,        setDetail]        = useState(null);
+
+  // Navigate with back-tracking
+  const goScreen = (s) => { setPrevScreen(screen); setScreen(s); };
   const [pendingInvite, setPendingInvite] = useState(null);
   const [inviteChecked, setInviteChecked] = useState(false);
   const [monthlyKey,    setMonthlyKey]    = useState(null); // "2025-06" → opens P&L for that month
@@ -3868,10 +3872,10 @@ export default function GasLedgerApp() {
 
   // Expose setScreen and plant name globally for Dashboard quick-actions and PDF
   useEffect(() => {
-    window.__setScreen  = setScreen;
+    window.__setScreen  = (s) => goScreen(s);
     window.__plantName  = profile?.displayName || "";
     return () => { delete window.__setScreen; delete window.__plantName; };
-  }, [profile?.displayName]);
+  }, [profile?.displayName, screen]);
 
   const globalCSS = `
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3985,7 +3989,7 @@ export default function GasLedgerApp() {
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
-        {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
+        {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen(prevScreen||"dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
         {screen==="staffaccount"&& <StaffAccountScreen user={user} profile={profile} onSignOut={signOutUser} back={()=>setScreen("dashboard")}/> }
         {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} submittedBy={user?.uid} back={()=>setScreen("dashboard")} todayExpenses={standaloneExpenses.filter(e=>e.date===new Date().toISOString().split("T")[0]&&e.submittedBy===user?.uid)}/>}
