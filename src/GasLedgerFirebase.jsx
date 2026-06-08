@@ -2686,50 +2686,9 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
         {/* ── Plan & Billing section ─────────────────────── */}
         {(()=>{
           const PLANS = [
-            {
-              id:    "free",
-              name:  "Free",
-              price: 0,
-              tag:   "Beta",
-              color: T.muted,
-              features: [
-                "Dashboard & stock summary",
-                "Daily entry logging",
-                "P&L reports with PDF export",
-                "Stock & refill tracker",
-                "Up to 1 staff member",
-              ],
-            },
-            {
-              id:    "basic",
-              name:  "Basic",
-              price: 2000,
-              tag:   "Popular",
-              color: T.primary,
-              features: [
-                "Everything in Free",
-                "Up to 3 staff members",
-                "WhatsApp share reports",
-                "Expense tracker",
-                "Monthly summary",
-                "Priority support",
-              ],
-            },
-            {
-              id:    "pro",
-              name:  "Pro",
-              price: 5000,
-              tag:   "Best value",
-              color: T.gold,
-              features: [
-                "Everything in Basic",
-                "Unlimited staff members",
-                "Multi-plant management",
-                "Credit customer tracking",
-                "Push notifications",
-                "Custom PDF branding",
-              ],
-            },
+            {id:"free",  name:"Free",  price:0,    tag:"Beta",       extras:["1 staff member","All core features"]},
+            {id:"basic", name:"Basic", price:2000, tag:"Popular",    extras:["Up to 3 staff","WhatsApp share","Priority support"]},
+            {id:"pro",   name:"Pro",   price:5000, tag:"Best value", extras:["Unlimited staff","Multi-plant","Credit tracking"]},
           ];
 
           const currentPlan = getPlan(profile);
@@ -2763,99 +2722,80 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             </div>
             <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
 
-              {/* Current plan banner */}
+              {/* Current plan pill */}
               <div style={{background:T.surface,padding:"14px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:F}}>
-                    {PLANS.find(p=>p.id===currentPlan)?.name||"Free"} plan
-                  </div>
-                  <div style={{fontSize:12,color:T.muted,fontFamily:F,marginTop:2}}>
-                    {currentPlan==="free" ? "All features free during beta" : `₦${PLANS.find(p=>p.id===currentPlan)?.price?.toLocaleString("en-NG")}/month`}
+                  <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:F}}>{PLANS.find(p=>p.id===currentPlan)?.name||"Free"} plan</div>
+                  <div style={{fontSize:12,color:T.muted,marginTop:2,fontFamily:F}}>
+                    {currentPlan==="free"?"All features free during beta":`₦${PLANS.find(p=>p.id===currentPlan)?.price?.toLocaleString("en-NG")}/month`}
                   </div>
                 </div>
                 <span style={{background:`${T.success}15`,color:T.success,fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:R.pill,fontFamily:F}}>Active</span>
               </div>
 
-              {/* Plan cards */}
-              <div style={{padding:"14px 16px 4px",display:"flex",flexDirection:"column",gap:10}}>
-                {PLANS.map(plan=>{
-                  const isActive  = currentPlan === plan.id;
-                  const isPaid    = plan.price > 0;
-                  const isLoading = billingLd === plan.id;
-                  return (
-                    <div key={plan.id} style={{
-                      background: isActive ? `${T.primary}08` : T.surface,
-                      border: `${isActive?"2px":"1px"} solid ${isActive?T.primary:T.border}`,
-                      borderRadius: R.lg,
-                      padding: "14px",
-                      transition: "border-color .15s",
-                    }}>
-                      {/* Plan header */}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                        <div>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <span style={{fontSize:16,fontWeight:700,color:T.text,fontFamily:F}}>{plan.name}</span>
-                            <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:R.pill,
-                              background: plan.id==="pro"?`${T.gold}20`:plan.id==="basic"?`${T.primary}12`:T.bg2,
-                              color:      plan.id==="pro"?T.gold:plan.id==="basic"?T.primary:T.muted,
-                              fontFamily:F}}>
-                              {plan.tag}
-                            </span>
-                          </div>
-                          <div style={{fontSize:18,fontWeight:800,color:plan.id==="pro"?T.gold:T.primary,fontFamily:F,marginTop:4}}>
-                            {plan.price===0 ? "Free" : `₦${plan.price.toLocaleString("en-NG")}`}
-                            {plan.price>0&&<span style={{fontSize:12,fontWeight:400,color:T.muted}}>/month</span>}
-                          </div>
+              {/* Compact 3-column plan selector */}
+              <div style={{padding:"14px 16px"}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+                  {PLANS.map(plan=>{
+                    const isActive  = currentPlan===plan.id;
+                    const isLoading = billingLd===plan.id;
+                    return (
+                      <div key={plan.id}
+                        onClick={()=>!isActive&&handleUpgrade(plan)}
+                        style={{
+                          background: isActive?T.primary:T.surface,
+                          border:`${isActive?"2px":"1px"} solid ${isActive?T.primary:T.border}`,
+                          borderRadius:R.lg,padding:"12px 10px",
+                          cursor:isActive?"default":"pointer",
+                          textAlign:"center",
+                          transition:"all .15s",
+                          position:"relative",
+                        }}>
+                        {/* Active checkmark */}
+                        {isActive&&<div style={{position:"absolute",top:6,right:6,width:16,height:16,borderRadius:"50%",background:T.gold,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <Icon n="check" s={9} c="#000"/>
+                        </div>}
+                        {/* Plan tag */}
+                        <div style={{fontSize:9,fontWeight:600,color:isActive?"rgba(255,255,255,.6)":plan.id==="pro"?T.gold:T.muted,marginBottom:4,fontFamily:F,textTransform:"uppercase",letterSpacing:.4}}>{plan.tag}</div>
+                        {/* Plan name */}
+                        <div style={{fontSize:14,fontWeight:700,color:isActive?"#fff":T.text,fontFamily:F,marginBottom:4}}>{plan.name}</div>
+                        {/* Price */}
+                        <div style={{fontSize:plan.price===0?13:15,fontWeight:800,color:isActive?T.gold:plan.id==="pro"?T.gold:T.primary,fontFamily:F,lineHeight:1}}>
+                          {plan.price===0?"Free":`₦${(plan.price/1000)}k`}
                         </div>
-                        {isActive && (
-                          <div style={{width:24,height:24,borderRadius:"50%",background:T.primary,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                            <Icon n="check" s={13} c="#fff"/>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Features */}
-                      <div style={{marginBottom:12}}>
-                        {plan.features.map(f=>(
-                          <div key={f} style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
-                            <Icon n="check" s={12} c={isActive?T.primary:T.muted}/>
-                            <span style={{fontSize:12,color:isActive?T.text:T.muted,fontFamily:F}}>{f}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* CTA */}
-                      {isActive ? (
-                        <div style={{padding:"8px 12px",background:`${T.primary}10`,borderRadius:R.md,fontSize:12,fontWeight:600,color:T.primary,textAlign:"center",fontFamily:F}}>
-                          ✓ Current plan
+                        {plan.price>0&&<div style={{fontSize:9,color:isActive?"rgba(255,255,255,.5)":T.muted,fontFamily:F,marginTop:2}}>/month</div>}
+                        {/* Key extras */}
+                        <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:3}}>
+                          {plan.extras.map(e=>(
+                            <div key={e} style={{fontSize:9,color:isActive?"rgba(255,255,255,.7)":T.muted,fontFamily:F,lineHeight:1.3}}>{e}</div>
+                          ))}
                         </div>
-                      ) : (
-                        <button
-                          onClick={()=>handleUpgrade(plan)}
-                          disabled={!!billingLd}
-                          style={{
-                            width:"100%",padding:"10px",
-                            background: plan.id==="pro" ? T.gold : T.primary,
-                            border:"none",borderRadius:R.md,
-                            fontSize:13,fontWeight:600,
-                            color: plan.id==="pro" ? "#000" : "#fff",
-                            cursor: billingLd?"default":"pointer",
-                            opacity: billingLd&&!isLoading?0.5:1,
-                            fontFamily:F,
-                          }}>
-                          {isLoading ? "Opening payment…" : `Upgrade to ${plan.name} — ₦${plan.price.toLocaleString("en-NG")}/mo`}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {billingErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"10px 12px",fontSize:13,color:T.danger,fontFamily:F}}>{billingErr}</div>}
-                {billingOk &&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"10px 12px",fontSize:13,color:T.success,fontFamily:F}}>{billingOk}</div>}
-
-                <div style={{fontSize:11,color:T.muted,textAlign:"center",lineHeight:1.6,paddingBottom:8,fontFamily:F}}>
-                  Payments secured by Paystack. Cancel anytime.
+                        {/* Loading indicator */}
+                        {isLoading&&<div style={{marginTop:6,fontSize:10,color:T.muted,fontFamily:F}}>Opening…</div>}
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Upgrade button — only show if not on highest plan */}
+                {currentPlan!=="pro"&&(
+                  <button
+                    onClick={()=>handleUpgrade(PLANS.find(p=>p.id===(currentPlan==="free"?"basic":"pro")))}
+                    disabled={!!billingLd}
+                    style={{width:"100%",padding:"12px",background:currentPlan==="free"?T.primary:T.gold,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:currentPlan==="free"?"#fff":"#000",cursor:billingLd?"default":"pointer",fontFamily:F,marginBottom:8}}>
+                    {billingLd?"Opening payment…":currentPlan==="free"?`Upgrade to Basic — ₦2,000/mo`:`Upgrade to Pro — ₦5,000/mo`}
+                  </button>
+                )}
+                {currentPlan==="pro"&&(
+                  <div style={{padding:"10px",background:`${T.success}10`,borderRadius:R.md,fontSize:12,fontWeight:600,color:T.success,textAlign:"center",fontFamily:F,marginBottom:8}}>
+                    ✓ You're on the best plan
+                  </div>
+                )}
+
+                {billingErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"9px 12px",fontSize:12,color:T.danger,fontFamily:F,marginBottom:6}}>{billingErr}</div>}
+                {billingOk &&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"9px 12px",fontSize:12,color:T.success,fontFamily:F,marginBottom:6}}>{billingOk}</div>}
+
+                <div style={{fontSize:10,color:T.muted,textAlign:"center",fontFamily:F}}>Secured by Paystack · Cancel anytime</div>
               </div>
             </div>
           </>);
