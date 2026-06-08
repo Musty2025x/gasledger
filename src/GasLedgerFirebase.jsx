@@ -581,87 +581,42 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
 
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 16px"}}>
 
-        {/* ── Onboarding checklist ────────────────────────────
-            Derives completion from live data — no extra state.
-            Hides automatically once all 3 steps are done.      */}
-        {(()=>{
-          const hasDelivery  = stock.periods.length > 0;
-          const hasPrice     = SP > DEFAULT_SELL_PRICE || (sellPrice && sellPrice > 0);
-          const hasEntry     = entries.length > 0;
-          const allDone      = hasDelivery && hasPrice && hasEntry;
-          if (allDone) return null;
-
-          const steps = [
-            {
-              done: hasDelivery,
-              num:  1,
-              title:"Log your first delivery",
-              sub:  "Record how much gas you received and the supplier cost per kg.",
-              cta:  "Add delivery",
-              fn:   goStock,
-            },
-            {
-              done: hasPrice,
-              num:  2,
-              title:"Set your selling price",
-              sub:  "Enter the current price per kg. This auto-fills every daily entry.",
-              cta:  "Set price",
-              fn:   goSetPrice,
-            },
-            {
-              done: hasEntry,
-              num:  3,
-              title:"Log your first daily entry",
-              sub:  "Record today's meter readings and cash collected.",
-              cta:  "New entry",
-              fn:   goEntry,
-            },
+        {/* Onboarding checklist — owner only */}
+        {role==="owner"&&(()=>{
+          const hasDelivery=stock.periods.length>0;
+          const hasPrice=SP>DEFAULT_SELL_PRICE||(sellPrice&&sellPrice>0);
+          const hasEntry=entries.length>0;
+          const allDone=hasDelivery&&hasPrice&&hasEntry;
+          if(allDone)return null;
+          const steps=[
+            {done:hasDelivery,num:1,title:"Log your first delivery",sub:"Record how much gas you received and the supplier cost per kg.",cta:"Add delivery",fn:goStock},
+            {done:hasPrice,num:2,title:"Set your selling price",sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",fn:goSetPrice},
+            {done:hasEntry,num:3,title:"Log your first daily entry",sub:"Record today's meter readings and cash collected.",cta:"New entry",fn:goEntry},
           ];
-
-          const doneCount = steps.filter(s=>s.done).length;
-          const pct       = Math.round((doneCount/3)*100);
-
+          const doneCount=steps.filter(s=>s.done).length;
+          const pct=Math.round((doneCount/3)*100);
           return (
             <div style={{marginBottom:16}}>
               <Card pad="0">
-                {/* Header */}
                 <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${T.border}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started</div>
                     <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{doneCount} of 3 done</span>
                   </div>
-                  {/* Progress bar */}
                   <div style={{height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
                     <div style={{height:"100%",width:`${pct}%`,background:T.primary,borderRadius:R.pill,transition:"width .4s ease"}}/>
                   </div>
                 </div>
-                {/* Steps */}
                 {steps.map((s,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",opacity:s.done?0.55:1,transition:"opacity .3s"}}>
-                    {/* Step indicator */}
-                    <div style={{
-                      width:28,height:28,borderRadius:"50%",flexShrink:0,marginTop:1,
-                      background:s.done?T.success:`${T.primary}12`,
-                      border:`1.5px solid ${s.done?T.success:T.border}`,
-                      display:"flex",alignItems:"center",justifyContent:"center",
-                    }}>
-                      {s.done
-                        ? <Icon n="check" s={14} c="#fff"/>
-                        : <span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{s.num}</span>
-                      }
+                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",opacity:s.done?0.55:1}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,marginTop:1,background:s.done?T.success:`${T.primary}12`,border:`1.5px solid ${s.done?T.success:T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {s.done?<Icon n="check" s={14} c="#fff"/>:<span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{s.num}</span>}
                     </div>
-                    {/* Text */}
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:s.done?400:600,color:T.text,fontFamily:F,textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
                       {!s.done&&<div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2,lineHeight:1.5}}>{s.sub}</div>}
                     </div>
-                    {/* CTA */}
-                    {!s.done&&(
-                      <button onClick={s.fn}
-                        style={{flexShrink:0,padding:"6px 12px",background:T.primary,border:"none",borderRadius:R.md,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",marginTop:1}}>
-                        {s.cta}
-                      </button>
-                    )}
+                    {!s.done&&<button onClick={s.fn} style={{flexShrink:0,padding:"6px 12px",background:T.primary,border:"none",borderRadius:R.md,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",marginTop:1}}>{s.cta}</button>}
                   </div>
                 ))}
               </Card>
@@ -669,33 +624,43 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           );
         })()}
 
-        {/* Stock summary */}
+        {/* Stock summary — staff sees kg remaining + % bar only, no delivery cost info */}
         {stock.current&&(()=>{
-          const {delivery,available,remaining,pct,carryForward,sold}=stock.current;
+          const {delivery,remaining,pct,carryForward,sold}=stock.current;
           const bc=pct>40?T.success:pct>15?T.warning:T.danger;
           return (
             <div style={{marginBottom:16}}>
-              {carryForward>0&&(
-                <div style={{background:"#fffbeb",border:`1px solid #f59e0b`,borderRadius:R.lg,padding:"10px 14px",marginBottom:8,display:"flex",gap:10,alignItems:"flex-start"}}>
+              {carryForward>0&&role==="owner"&&(
+                <div style={{background:"#fffbeb",border:"1px solid #f59e0b",borderRadius:R.lg,padding:"10px 14px",marginBottom:8,display:"flex",gap:10,alignItems:"flex-start"}}>
                   <Icon n="alert" s={16} c="#b45309"/>
-                  <div style={{fontSize:12,color:"#92400e",fontFamily:F,lineHeight:1.5}}><strong>{fmtKg(carryForward)}</strong> carry-forward from previous delivery included in current stock.</div>
+                  <div style={{fontSize:12,color:"#92400e",fontFamily:F,lineHeight:1.5}}><strong>{fmtKg(carryForward)}</strong> carry-forward from previous delivery included.</div>
                 </div>
               )}
               <Card>
-                <div style={{padding:"12px 14px 4px"}}>
+                <div style={{padding:"12px 14px 12px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <span style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Stock — current period</span>
+                    <span style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{role==="staff"?"Stock level":"Stock — current period"}</span>
                     <Badge label={`${pct}% remaining`} variant={pct>40?"success":pct>15?"warning":"danger"}/>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-                    {[["Delivered",fmtKg(delivery.kg),false],["Sold",fmtKg(sold),false],["Remaining",fmtKg(remaining),true]].map(([l,v,hi])=>(
-                      <div key={l} style={{background:hi?T.primary:T.bg,borderRadius:R.md,padding:"10px 8px",textAlign:"center"}}>
-                        <div style={{fontSize:14,fontWeight:700,color:hi?T.gold:T.text,fontFamily:F}}>{v}</div>
-                        <div style={{fontSize:10,color:hi?"rgba(255,255,255,.5)":T.muted,fontFamily:F,marginTop:2,textTransform:"uppercase",letterSpacing:.3}}>{l}</div>
+                  {role==="owner"?(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+                      {[["Delivered",fmtKg(delivery.kg),false],["Sold",fmtKg(sold),false],["Remaining",fmtKg(remaining),true]].map(([l,v,hi])=>(
+                        <div key={l} style={{background:hi?T.primary:T.bg,borderRadius:R.md,padding:"10px 8px",textAlign:"center"}}>
+                          <div style={{fontSize:14,fontWeight:700,color:hi?T.gold:T.text,fontFamily:F}}>{v}</div>
+                          <div style={{fontSize:10,color:hi?"rgba(255,255,255,.5)":T.muted,fontFamily:F,marginTop:2,textTransform:"uppercase",letterSpacing:.3}}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ):(
+                    <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:10}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:24,fontWeight:700,color:bc,fontFamily:F}}>{fmtKg(remaining)}</div>
+                        <div style={{fontSize:11,color:T.muted,marginTop:2,fontFamily:F}}>remaining in tank</div>
                       </div>
-                    ))}
-                  </div>
-                  <div style={{height:6,borderRadius:R.pill,background:T.bg2,overflow:"hidden",marginBottom:12}}>
+                      <div style={{fontSize:32,fontWeight:800,color:bc,fontFamily:F,opacity:.15}}>{pct}%</div>
+                    </div>
+                  )}
+                  <div style={{height:6,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
                     <div style={{height:"100%",width:`${Math.max(2,pct)}%`,background:bc,borderRadius:R.pill,transition:"width .4s"}}/>
                   </div>
                 </div>
@@ -704,15 +669,18 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           );
         })()}
 
-        {/* 7-day stats */}
+        {/* 7-day stats — staff: gas dispensed + total sales only */}
         <SLabel>7-day summary</SLabel>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-          {[
-            {l:"Revenue",     v:fmt(totals.rev),    vc:T.gold,                                       bg:T.primary, sub:"all days"},
-            {l:"Gas sold",    v:fmtKg(totals.gas),  vc:T.text,                                       bg:T.surface, sub:`avg ${fmtKg(Math.round(totals.gas/Math.max(1,Math.min(7,entries.length))))} /day`},
-            {l:"Gross profit",v:fmt(totals.grossP), vc:totals.grossP>=0?T.success:T.danger,          bg:T.surface, sub:CP>0?`₦${SP-CP}/kg margin`:"add cost in Stock"},
-            {l:"Expenses",    v:fmt(totals.exp),    vc:T.text,                                       bg:T.surface, sub:"operating costs"},
-          ].map(({l,v,vc,bg,sub})=>(
+          {(role==="staff"?[
+            {l:"Gas dispensed",v:fmtKg(totals.gas), vc:T.text,bg:T.primary,sub:`avg ${fmtKg(Math.round(totals.gas/Math.max(1,Math.min(7,entries.length))))} /day`},
+            {l:"Total sales",  v:fmt(totals.rev),   vc:T.text,bg:T.surface,sub:"cash + POS"},
+          ]:[
+            {l:"Revenue",     v:fmt(totals.rev),    vc:T.gold,                             bg:T.primary,sub:"all days"},
+            {l:"Gas sold",    v:fmtKg(totals.gas),  vc:T.text,                             bg:T.surface,sub:`avg ${fmtKg(Math.round(totals.gas/Math.max(1,Math.min(7,entries.length))))} /day`},
+            {l:"Gross profit",v:fmt(totals.grossP), vc:totals.grossP>=0?T.success:T.danger,bg:T.surface,sub:CP>0?`₦${SP-CP}/kg margin`:"add cost in Stock"},
+            {l:"Expenses",    v:fmt(totals.exp),    vc:T.text,                             bg:T.surface,sub:"operating costs"},
+          ]).map(({l,v,vc,bg,sub})=>(
             <div key={l} style={{background:bg,borderRadius:R.lg,border:`1px solid ${bg===T.primary?"transparent":T.border}`,padding:"12px 14px"}}>
               <div style={{fontSize:11,color:bg===T.primary?"rgba(255,255,255,.5)":T.muted,fontFamily:F,fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{l}</div>
               <div style={{fontSize:18,fontWeight:700,color:vc,fontFamily:F}}>{v}</div>
@@ -721,24 +689,29 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           ))}
         </div>
 
-        {/* Chart */}
-        <Card pad="14px" style={{marginBottom:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <span style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Sales trend</span>
-            <span style={{fontSize:11,color:T.muted,fontFamily:F}}>Last 7 days</span>
-          </div>
-          <MiniBar data={chartData}/>
-        </Card>
+        {/* Sales trend chart — owner only */}
+        {role==="owner"&&(
+          <Card pad="14px" style={{marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <span style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Sales trend</span>
+              <span style={{fontSize:11,color:T.muted,fontFamily:F}}>Last 7 days</span>
+            </div>
+            <MiniBar data={chartData}/>
+          </Card>
+        )}
 
-        {/* Quick actions */}
+        {/* Quick actions — staff: New entry + Money only */}
         <SLabel>Quick actions</SLabel>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-          {[
-            {icon:"history", label:"All entries",   fn:()=>window.__setScreen&&window.__setScreen("history")},
-            {icon:"pnl",     label:"P&L report",    fn:()=>window.__setScreen&&window.__setScreen("pnl")},
-            {icon:"truck",   label:"Stock tracker",  fn:()=>window.__setScreen&&window.__setScreen("stock")},
-            {icon:"entry",   label:"New entry",      fn:goEntry},
-          ].map(a=>(
+          {(role==="staff"?[
+            {icon:"entry",label:"New entry",fn:goEntry},
+            {icon:"cash", label:"Money",    fn:()=>window.__setScreen&&window.__setScreen("remittance")},
+          ]:[
+            {icon:"history",label:"All entries",  fn:()=>window.__setScreen&&window.__setScreen("history")},
+            {icon:"pnl",    label:"P&L report",   fn:()=>window.__setScreen&&window.__setScreen("pnl")},
+            {icon:"truck",  label:"Stock tracker", fn:()=>window.__setScreen&&window.__setScreen("stock")},
+            {icon:"entry",  label:"New entry",     fn:goEntry},
+          ]).map(a=>(
             <div key={a.label} onClick={a.fn}
               style={{background:T.surface,borderRadius:R.lg,border:`1px solid ${T.border}`,padding:"13px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"background .12s"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.bg}
@@ -751,14 +724,14 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           ))}
         </div>
 
-        {/* Recent */}
+        {/* Recent entries — staff: no profit column, no expense count */}
         <SLabel>Recent entries</SLabel>
         {entries.length===0?(
           <div style={{textAlign:"center",padding:"32px 0",color:T.muted,fontFamily:F,fontSize:13}}>No entries yet. Tap Entry below to start.</div>
         ):(
           <Card>
             {entries.slice(0,5).map((e,i)=>{
-              const c=calcEntry(e, SP, CP);
+              const c=calcEntry(e,SP,CP);
               return (
                 <div key={e.id} onClick={()=>goDayDetail(e)}
                   style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<Math.min(4,entries.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer"}}
@@ -770,12 +743,19 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{fmt(c.sales)}</div>
-                    <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:1}}>{fmtKg(c.gas)} · {(e.expenses||[]).length} expense(s)</div>
+                    <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:1}}>{fmtKg(c.gas)}{role==="owner"?` · ${(e.expenses||[]).length} expense(s)`:""}</div>
                   </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:c.grossProfit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.grossProfit)}</div>
-                    <div style={{fontSize:10,color:T.muted,fontFamily:F}}>gross profit</div>
-                  </div>
+                  {role==="owner" ? (
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:13,fontWeight:700,color:c.grossProfit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.grossProfit)}</div>
+                      <div style={{fontSize:10,color:T.muted,fontFamily:F}}>gross profit</div>
+                    </div>
+                  ) : (
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{fmtKg(c.gas)}</div>
+                      <div style={{fontSize:10,color:T.muted,fontFamily:F}}>dispensed</div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -790,7 +770,7 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
 // ═══════════════════════════════════════════════════════════════
 // DAILY ENTRY
 // ═══════════════════════════════════════════════════════════════
-const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDates=[]}) => {
+const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDates=[], role="owner"}) => {
   const GP  = pricePerKg || DEFAULT_SELL_PRICE;
   const CP  = costPerKg  || DEFAULT_COST_PRICE;
   const now = new Date().toISOString().split("T")[0];
@@ -821,6 +801,11 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
   const setE = (i,k,v) => setExps(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
 
   const save = async () => {
+    // Staff cannot overwrite an existing entry — block at save time
+    if (role==="staff" && isDuplicate) {
+      setErr("An entry already exists for this date. Contact the plant owner to make changes.");
+      return;
+    }
     setLd(true); setErr("");
     try {
       await onSave({date,openMeter:Number(open),closeMeter:Number(close),cashSales:Number(cash)||0,posSales:Number(pos)||0,expenses:exps.filter(x=>x.cat&&x.amt).map(x=>({cat:x.cat,amt:Number(x.amt)})),notes});
@@ -961,6 +946,8 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
           )}
         </Card>
 
+        {/* Expenses — owner only. Staff do not manage expenses. */}
+        {role==="owner"&&(<>
         <SLabel>Expenses</SLabel>
         {/* Expense manager — card list with add/edit/delete */}
         {(()=>{
@@ -1095,6 +1082,7 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
             </>
           );
         })()}
+        </>)}
 
         <SLabel>Notes</SLabel>
         <Card pad="12px 14px" style={{marginBottom:20}}>
@@ -1959,7 +1947,7 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standalon
 // ═══════════════════════════════════════════════════════════════
 // HISTORY
 // ═══════════════════════════════════════════════════════════════
-const HistoryScreen = ({entries, back, goDayDetail, sellPrice, costPrice}) => {
+const HistoryScreen = ({entries, back, goDayDetail, sellPrice, costPrice, role="owner"}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
   return (
@@ -1983,12 +1971,19 @@ const HistoryScreen = ({entries, back, goDayDetail, sellPrice, costPrice}) => {
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:14,fontWeight:600,color:T.text,fontFamily:F}}>{fmt(c.sales)}</div>
-                  <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:1}}>{fmtKg(c.gas)} · {(e.expenses||[]).length} expense(s)</div>
+                  <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:1}}>{fmtKg(c.gas)} dispensed</div>
                 </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:13,fontWeight:700,color:c.grossProfit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.grossProfit)}</div>
-                  <div style={{fontSize:10,color:T.muted,fontFamily:F}}>gross profit</div>
-                </div>
+                {role==="owner" ? (
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:c.grossProfit>=0?T.success:T.danger,fontFamily:F}}>{fmt(c.grossProfit)}</div>
+                    <div style={{fontSize:10,color:T.muted,fontFamily:F}}>gross profit</div>
+                  </div>
+                ) : (
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{fmt(c.sales)}</div>
+                    <div style={{fontSize:10,color:T.muted,fontFamily:F}}>collected</div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2099,10 +2094,10 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
         {/* ── VIEW MODE ── */}
         {mode==="view" && (<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-            <StatTile label="Total sales"  value={fmt(c.sales)}  color={T.text}/>
-            <StatTile label="Gross profit" value={fmt(c.grossProfit)} color={c.grossProfit>=0?T.success:T.danger}/>
-            <StatTile label="Net profit"   value={fmt(c.profit)} color={c.profit>=0?T.success:T.danger}/>
-            <StatTile label="Variance"     value={(c.variance>=0?"+":"")+fmt(c.variance)} color={c.variance>=0?T.success:T.danger}/>
+            <StatTile label="Total sales"  value={fmt(c.sales)} color={T.text}/>
+            <StatTile label="Gas dispensed" value={fmtKg(c.gas)} color={T.primary}/>
+            {isOwner&&<StatTile label="Gross profit" value={fmt(c.grossProfit)} color={c.grossProfit>=0?T.success:T.danger}/>}
+            {isOwner&&<StatTile label="Net profit"   value={fmt(c.profit)}      color={c.profit>=0?T.success:T.danger}/>}
           </div>
           <SLabel mt={0}>Meter</SLabel>
           <Card style={{marginBottom:12}}>
@@ -2114,13 +2109,13 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
           <Card style={{marginBottom:12}}>
             <ViewRow l="Cash"          v={fmt(entry.cashSales)}/>
             <ViewRow l="POS / transfer" v={fmt(entry.posSales)}/>
-            <ViewRow l="Total"         v={fmt(c.sales)}        accent={T.primary}/>
-            <ViewRow l="Expected"      v={fmt(c.expRev)}/>
-            <ViewRow l="Variance"      v={(c.variance>=0?"+":"")+fmt(c.variance)} accent={c.variance>=0?T.success:T.danger}/>
-            {CP>0&&<ViewRow l={`COGS (₦${CP}/kg)`}   v={fmt(c.cogs)}        accent={T.danger}/>}
-            {CP>0&&<ViewRow l="Gross profit"           v={fmt(c.grossProfit)} accent={c.grossProfit>=0?T.success:T.danger}/>}
+            <ViewRow l="Total"         v={fmt(c.sales)} accent={T.primary}/>
+            {isOwner&&<ViewRow l="Expected"     v={fmt(c.expRev)}/>}
+            {isOwner&&<ViewRow l="Variance"     v={(c.variance>=0?"+":"")+fmt(c.variance)} accent={c.variance>=0?T.success:T.danger}/>}
+            {isOwner&&CP>0&&<ViewRow l={`COGS (₦${CP}/kg)`} v={fmt(c.cogs)} accent={T.danger}/>}
+            {isOwner&&CP>0&&<ViewRow l="Gross profit"        v={fmt(c.grossProfit)} accent={c.grossProfit>=0?T.success:T.danger}/>}
           </Card>
-          {(entry.expenses||[]).length>0&&(<>
+          {isOwner&&(entry.expenses||[]).length>0&&(<>
             <SLabel>Expenses</SLabel>
             <Card style={{marginBottom:12}}>
               {(entry.expenses||[]).map((x,i)=><ViewRow key={i} l={x.cat} v={fmt(x.amt)} accent={T.danger}/>)}
@@ -3563,7 +3558,7 @@ export default function GasLedgerApp() {
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser}/>}
-        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)}/>}
+        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
