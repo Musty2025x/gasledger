@@ -330,22 +330,35 @@ export const getPendingInvite = async (email) => {
 };
 
 // Owner: live list of all invites for a plant
-export const useInvites = (plantId) => {
+// Owner: live list of invites — query by ownerUid so Firestore rules can evaluate it
+export const useInvites = (plantId, ownerUid) => {
   const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    if (!plantId) return;
-    const q = query(invitesCol(), where("plantId", "==", plantId), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setInvites(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    if (!plantId || !ownerUid) return;
+    // Query by ownerUid — Firestore rules allow reads where resource.data.ownerUid == uid()
+    const q = query(invitesCol(), where("ownerUid", "==", ownerUid));
+    const unsub = onSnapshot(q,
+      (snap) => {
+        // Filter to this plant client-side (owner may have multiple plants later)
+        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setInvites(all.filter(i => i.plantId === plantId).sort((a,b)=>
+          (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0)
+        ));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("useInvites error:", err.code);
+        setLoading(false);
+      }
+    );
     return unsub;
-  }, [plantId]);
+  }, [plantId, ownerUid]);
   return { invites, loading };
 };
 
-// Owner: live list of staff users for a plant (users with role=staff and this plantId)
+// Owner: live list of staff — stored under /plants/{plantId}/staff sub-path via users collection
+// Query users where plantId matches — rules allow owner to read users in same plant
 export const useStaffMembers = (plantId) => {
   const [staff,   setStaff]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -356,10 +369,16 @@ export const useStaffMembers = (plantId) => {
       where("plantId", "==", plantId),
       where("role",    "==", "staff")
     );
-    const unsub = onSnapshot(q, (snap) => {
-      setStaff(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(q,
+      (snap) => {
+        setStaff(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("useStaffMembers error:", err.code);
+        setLoading(false);
+      }
+    );
     return unsub;
   }, [plantId]);
   return { staff, loading };

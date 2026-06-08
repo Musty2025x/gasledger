@@ -3330,7 +3330,7 @@ export default function GasLedgerApp() {
   const {data:prices,          loading:pLd} = usePrices(plantId);
   const {data:remittances              }    = useRemittances(plantId);
   const {data:standaloneExpenses       }    = useStandaloneExpenses(plantId);
-  const {invites                       }    = useInvites(plantId);
+  const {invites                       }    = useInvites(plantId, user?.uid);
   const {staff: staffMembers           }    = useStaffMembers(plantId);
 
   const stock     = buildStockPeriods(entries, deliveries);
