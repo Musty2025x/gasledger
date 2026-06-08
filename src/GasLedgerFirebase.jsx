@@ -483,15 +483,32 @@ const SetupScreen = ({user}) => {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice}) => {
+const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[]}) => {
   const [hide, setHide] = useState(false);
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
 
-  const totals = entries.slice(0,7).reduce((a,e)=>{
+  // 7-day window dates
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
+
+  const entryTotals = entries.slice(0,7).reduce((a,e)=>{
     const c=calcEntry(e, SP, CP);
     return {rev:a.rev+c.sales, gas:a.gas+c.gas, profit:a.profit+c.profit, grossP:a.grossP+c.grossProfit, exp:a.exp+c.exp};
   },{rev:0,gas:0,profit:0,grossP:0,exp:0});
+
+  // Standalone expenses in last 7 days
+  const standaloneExp7 = standaloneExpenses
+    .filter(e => e.date >= sevenDaysAgoStr)
+    .reduce((s,e) => s + (e.amount||0), 0);
+
+  // Merged totals
+  const totals = {
+    ...entryTotals,
+    exp:    entryTotals.exp    + standaloneExp7,
+    profit: entryTotals.profit - standaloneExp7,
+  };
 
   const today  = entries[0];
   const todayC = today ? calcEntry(today, SP, CP) : null;
@@ -1412,7 +1429,7 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 // ═══════════════════════════════════════════════════════════════
 // P&L REPORT
 // ═══════════════════════════════════════════════════════════════
-const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
+const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standaloneExpenses=[]}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -1484,12 +1501,25 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
     };
   },{rev:0,gas:0,exp:0,profit:0,grossP:0,cogs:0,cash:0,pos:0,variance:0,expRev:0});
 
-  const margin      = totals.rev>0  ? Math.round((totals.profit/totals.rev)*100)  : 0;
-  const grossMargin = totals.rev>0  ? Math.round((totals.grossP/totals.rev)*100)  : 0;
-  const avgDaily    = days>0        ? totals.rev/days : 0;
+  // Standalone expenses in the selected date range
+  const standaloneFiltered = standaloneExpenses.filter(e => e.date >= fromDate && e.date <= toDate);
+  const standaloneTotal    = standaloneFiltered.reduce((s,e) => s+(e.amount||0), 0);
 
+  // Merged totals — add standalone expenses to entry-level expenses
+  const mergedTotals = {
+    ...totals,
+    exp:    mergedTotals.exp    + standaloneTotal,
+    profit: mergedTotals.profit - standaloneTotal,
+  };
+
+  const margin      = mergedTotals.rev>0  ? Math.round((mergedTotals.profit/mergedTotals.rev)*100)  : 0;
+  const grossMargin = mergedTotals.rev>0  ? Math.round((mergedTotals.grossP/mergedTotals.rev)*100)  : 0;
+  const avgDaily    = days>0              ? mergedTotals.rev/days : 0;
+
+  // Build expense breakdown from both entry expenses and standalone
   const expBd = {};
   filtered.forEach(e=>(e.expenses||[]).forEach(x=>{expBd[x.cat]=(expBd[x.cat]||0)+x.amt;}));
+  standaloneFiltered.forEach(e=>{ expBd[e.category]=(expBd[e.category]||0)+(e.amount||0); });
   const expList = Object.entries(expBd).sort((a,b)=>b[1]-a[1]);
 
   // ── range label for header ────────────────────────────────
@@ -1535,7 +1565,7 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
       doc.setTextColor(255,255,255);
       doc.setFontSize(10); doc.setFont("helvetica","normal");
       // Plant name on second line
-      const plantNamePDF = totals.rev > 0 ? (window.__plantName||"Gas Plant") : "Gas Plant";
+      const plantNamePDF = mergedTotals.rev > 0 ? (window.__plantName||"Gas Plant") : "Gas Plant";
       doc.text(plantNamePDF, mg, 22);
       doc.setFontSize(9);
       doc.text(`${rangeLabel}  ·  ${days} day${days!==1?"s":""}  ·  Generated ${new Date().toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"})}`, mg, 29);
@@ -1548,12 +1578,12 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
       // ── KPI boxes ──────────────────────────────────────────
       doc.setFont("helvetica","normal");
       const kpis = [
-        ["Revenue",      pdfFmt(totals.rev)],
-        ["Gross profit", pdfFmt(totals.grossP)],
-        ["Net profit",   pdfFmt(totals.profit)],
+        ["Revenue",      pdfFmt(mergedTotals.rev)],
+        ["Gross profit", pdfFmt(mergedTotals.grossP)],
+        ["Net profit",   pdfFmt(mergedTotals.profit)],
         ["Gas sold",     fmtKg(totals.gas)],
-        ["Cash",         pdfFmt(totals.cash)],
-        ["POS/transfer", pdfFmt(totals.pos)],
+        ["Cash",         pdfFmt(mergedTotals.cash)],
+        ["POS/transfer", pdfFmt(mergedTotals.pos)],
       ];
       const kpiW = (pageW - mg*2 - 10) / 3;
       kpis.forEach(([l,v],i) => {
@@ -1576,17 +1606,17 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
       doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
       doc.text("Income Statement", mg, y); y += 5;
       const incomeRows = [
-        ["Cash sales",     pdfFmt(totals.cash), false],
-        ["POS / transfer", pdfFmt(totals.pos),  false],
-        ["Gross revenue",  pdfFmt(totals.rev),  true],
+        ["Cash sales",     pdfFmt(mergedTotals.cash), false],
+        ["POS / transfer", pdfFmt(mergedTotals.pos),  false],
+        ["Gross revenue",  pdfFmt(mergedTotals.rev),  true],
       ];
       if (CP > 0) {
-        incomeRows.push([`Supplier cost (${fmtKg(totals.gas)} x NGN ${CP}/kg)`, pdfFmt(totals.cogs), false]);
-        incomeRows.push(["Gross profit", pdfFmt(totals.grossP), true]);
+        incomeRows.push([`Supplier cost (${fmtKg(totals.gas)} x NGN ${CP}/kg)`, pdfFmt(mergedTotals.cogs), false]);
+        incomeRows.push(["Gross profit", pdfFmt(mergedTotals.grossP), true]);
       }
       expList.forEach(([cat,amt]) => incomeRows.push([cat, pdfFmt(amt), false]));
-      incomeRows.push(["Total expenses", pdfFmt(totals.exp), true]);
-      incomeRows.push([`NET PROFIT  (margin: ${Math.round((totals.profit/totals.rev)*100)||0}%)`, pdfFmt(totals.profit), true]);
+      incomeRows.push(["Total expenses", pdfFmt(mergedTotals.exp), true]);
+      incomeRows.push([`NET PROFIT  (margin: ${Math.round((mergedTotals.profit/mergedTotals.rev)*100)||0}%)`, pdfFmt(mergedTotals.profit), true]);
       doc.autoTable({
         startY: y, margin:{left:mg, right:mg},
         head: [["Description","Amount"]],
@@ -1611,7 +1641,7 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
         startY: y, margin:{left:mg, right:mg},
         body: [
           [`Expected (${fmtKg(totals.gas)} x NGN ${SP}/kg)`, pdfFmt(totals.expRev)],
-          ["Actual collected",                                  pdfFmt(totals.rev)],
+          ["Actual collected",                                  pdfFmt(mergedTotals.rev)],
           ["Variance", (totals.variance===0 ? "Exact match — all gas accounted for" : (totals.variance>=0?"+":"-")+" "+pdfFmt(Math.abs(totals.variance)))],
         ],
         styles: {fontSize:9, cellPadding:3},
@@ -1637,9 +1667,9 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
             ];
           }).concat([[
             `Total (${days}d)`,
-            Math.round(totals.rev).toLocaleString("en-NG"),
+            Math.round(mergedTotals.rev).toLocaleString("en-NG"),
             fmtKg(totals.gas),
-            Math.round(totals.grossP).toLocaleString("en-NG"),
+            Math.round(mergedTotals.grossP).toLocaleString("en-NG"),
           ]]),
           styles: {fontSize:9, cellPadding:3},
           headStyles: {fillColor:[13,59,46], textColor:255},
@@ -1719,15 +1749,15 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
           `Plant: ${window.__plantName||"Gas Plant"}\n`+
           `Period: ${rangeLabel} (${days} days)\n`+
           `---\n`+
-          `Revenue: NGN ${Math.round(totals.rev).toLocaleString("en-NG")}\n`+
-          `COGS: NGN ${Math.round(totals.cogs).toLocaleString("en-NG")}\n`+
-          `Gross profit: NGN ${Math.round(totals.grossP).toLocaleString("en-NG")} (${Math.round((totals.grossP/totals.rev)*100)||0}%)\n`+
-          `Expenses: NGN ${Math.round(totals.exp).toLocaleString("en-NG")}\n`+
-          `Net profit: NGN ${Math.round(totals.profit).toLocaleString("en-NG")}\n`+
+          `Revenue: NGN ${Math.round(mergedTotals.rev).toLocaleString("en-NG")}\n`+
+          `COGS: NGN ${Math.round(mergedTotals.cogs).toLocaleString("en-NG")}\n`+
+          `Gross profit: NGN ${Math.round(mergedTotals.grossP).toLocaleString("en-NG")} (${Math.round((mergedTotals.grossP/mergedTotals.rev)*100)||0}%)\n`+
+          `Expenses: NGN ${Math.round(mergedTotals.exp).toLocaleString("en-NG")}\n`+
+          `Net profit: NGN ${Math.round(mergedTotals.profit).toLocaleString("en-NG")}\n`+
           `---\n`+
           `Gas sold: ${Math.round(totals.gas).toLocaleString("en-NG")} kg\n`+
-          `Cash: NGN ${Math.round(totals.cash).toLocaleString("en-NG")}\n`+
-          `POS: NGN ${Math.round(totals.pos).toLocaleString("en-NG")}\n`+
+          `Cash: NGN ${Math.round(mergedTotals.cash).toLocaleString("en-NG")}\n`+
+          `POS: NGN ${Math.round(mergedTotals.pos).toLocaleString("en-NG")}\n`+
           `_Sent from GasLedger_`
         );
         return (
@@ -1768,12 +1798,12 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
           {/* KPI grid */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
             {[
-              {l:"Revenue",      v:fmt(totals.rev),    color:T.gold,   bg:T.primary},
-              {l:"Gross profit", v:fmt(totals.grossP), color:totals.grossP>=0?T.success:T.danger, bg:T.surface},
-              {l:"Net profit",   v:fmt(totals.profit), color:totals.profit>=0?T.success:T.danger, bg:T.surface},
-              {l:"Expenses",     v:fmt(totals.exp),    color:T.text,   bg:T.surface},
-              {l:"Cash",         v:fmt(totals.cash),   color:T.text,   bg:T.surface},
-              {l:"POS / transfer",v:fmt(totals.pos),   color:T.text,   bg:T.surface},
+              {l:"Revenue",      v:fmt(mergedTotals.rev),    color:T.gold,   bg:T.primary},
+              {l:"Gross profit", v:fmt(mergedTotals.grossP), color:mergedTotals.grossP>=0?T.success:T.danger, bg:T.surface},
+              {l:"Net profit",   v:fmt(mergedTotals.profit), color:mergedTotals.profit>=0?T.success:T.danger, bg:T.surface},
+              {l:"Expenses",     v:fmt(mergedTotals.exp),    color:T.text,   bg:T.surface},
+              {l:"Cash",         v:fmt(mergedTotals.cash),   color:T.text,   bg:T.surface},
+              {l:"POS / transfer",v:fmt(mergedTotals.pos),   color:T.text,   bg:T.surface},
             ].map(({l,v,color,bg})=>(
               <div key={l} style={{background:bg,borderRadius:R.lg,border:`1px solid ${bg===T.primary?"transparent":T.border}`,padding:"11px 13px"}}>
                 <div style={{fontSize:11,color:bg===T.primary?"rgba(255,255,255,.5)":T.muted,fontFamily:F,fontWeight:500,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{l}</div>
@@ -1787,26 +1817,26 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
           {/* Income statement */}
           <SLabel>Income statement</SLabel>
           <Card style={{marginBottom:16}}>
-            <Row label="Cash sales"          value={fmt(totals.cash)}   indent credit={true}/>
-            <Row label="POS / transfer"       value={fmt(totals.pos)}    indent credit={true}/>
-            <Row label="Gross revenue"        value={fmt(totals.rev)}    bold   credit={true}/>
+            <Row label="Cash sales"          value={fmt(mergedTotals.cash)}   indent credit={true}/>
+            <Row label="POS / transfer"       value={fmt(mergedTotals.pos)}    indent credit={true}/>
+            <Row label="Gross revenue"        value={fmt(mergedTotals.rev)}    bold   credit={true}/>
             {CP > 0 && <>
               <div style={{padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`}}>
                 <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,fontFamily:F}}>Cost of goods sold</span>
               </div>
-              <Row label={`Supplier cost (${fmtKg(totals.gas)} × ₦${CP}/kg)`} value={fmt(totals.cogs)} indent credit={false}/>
-              <Row label="Gross profit" value={fmt(totals.grossP)} bold credit={totals.grossP>=0}/>
+              <Row label={`Supplier cost (${fmtKg(totals.gas)} × ₦${CP}/kg)`} value={fmt(mergedTotals.cogs)} indent credit={false}/>
+              <Row label="Gross profit" value={fmt(mergedTotals.grossP)} bold credit={mergedTotals.grossP>=0}/>
             </>}
             <div style={{padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`}}>
               <span style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,fontFamily:F}}>Operating expenses</span>
             </div>
             {expList.map(([cat,amt])=><Row key={cat} label={cat} value={fmt(amt)} indent credit={false}/>)}
             {expList.length===0&&<Row label="No expenses recorded" value="—" indent/>}
-            <Row label="Total expenses"       value={fmt(totals.exp)}  bold credit={false}/>
-            <div style={{padding:"12px 14px",background:totals.profit>=0?`${T.success}10`:`${T.danger}10`}}>
+            <Row label="Total expenses"       value={fmt(mergedTotals.exp)}  bold credit={false}/>
+            <div style={{padding:"12px 14px",background:mergedTotals.profit>=0?`${T.success}10`:`${T.danger}10`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:14,fontWeight:600,color:T.text,fontFamily:F}}>Net profit</span>
-                <span style={{fontSize:18,fontWeight:700,color:totals.profit>=0?T.success:T.danger,fontFamily:F}}>{fmt(totals.profit)}</span>
+                <span style={{fontSize:18,fontWeight:700,color:mergedTotals.profit>=0?T.success:T.danger,fontFamily:F}}>{fmt(mergedTotals.profit)}</span>
               </div>
               {CP > 0 && (
                 <div style={{fontSize:11,color:T.muted,marginTop:4,fontFamily:F}}>
@@ -1828,7 +1858,7 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
             </div>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
               <span style={{fontSize:12,color:T.muted}}>Actual collected</span>
-              <span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmt(totals.rev)}</span>
+              <span style={{fontSize:12,fontWeight:600,color:T.text}}>{fmt(mergedTotals.rev)}</span>
             </div>
             <Divider/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
@@ -1870,9 +1900,9 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth}) => {
             {/* Totals row */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 76px",gap:0,padding:"10px 14px",background:T.bg,borderTop:`1px solid ${T.border}`}}>
               <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:F}}>Total ({days}d)</span>
-              <span style={{textAlign:"right",fontSize:12,fontWeight:700,color:T.text,fontFamily:F}}>{fmt(totals.rev)}</span>
+              <span style={{textAlign:"right",fontSize:12,fontWeight:700,color:T.text,fontFamily:F}}>{fmt(mergedTotals.rev)}</span>
               <span style={{textAlign:"right",fontSize:12,fontWeight:600,color:T.muted,fontFamily:F}}>{fmtKg(totals.gas)}</span>
-              <span style={{textAlign:"right",fontSize:13,fontWeight:700,color:totals.grossP>=0?T.success:T.danger,fontFamily:F}}>{fmt(totals.grossP)}</span>
+              <span style={{textAlign:"right",fontSize:13,fontWeight:700,color:mergedTotals.grossP>=0?T.success:T.danger,fontFamily:F}}>{fmt(mergedTotals.grossP)}</span>
             </div>
           </Card>
         </>)}
@@ -3115,7 +3145,7 @@ const ExpensesScreen = ({ expenses, onAdd, onUpdate, onDelete, back }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice }) => {
+const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice, standaloneExpenses=[] }) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
 
@@ -3127,12 +3157,28 @@ const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice 
     monthMap[key].push(e);
   });
 
+  // Group standalone expenses by YYYY-MM
+  const standaloneByMonth = {};
+  standaloneExpenses.forEach(e => {
+    const key = (e.date||"").slice(0,7);
+    if (!standaloneByMonth[key]) standaloneByMonth[key] = 0;
+    standaloneByMonth[key] += (e.amount||0);
+  });
+
   const months = Object.keys(monthMap).sort((a,b)=>b.localeCompare(a)).map(key => {
     const mes = monthMap[key];
-    const totals = mes.reduce((a,e)=>{
+    const entryTotals = mes.reduce((a,e)=>{
       const c=calcEntry(e,SP,CP);
       return {rev:a.rev+c.sales, grossP:a.grossP+c.grossProfit, gas:a.gas+c.gas, profit:a.profit+c.profit};
     },{rev:0,grossP:0,gas:0,profit:0});
+
+    // Add standalone expenses for this month
+    const standaloneExp = standaloneByMonth[key] || 0;
+    const totals = {
+      ...entryTotals,
+      profit: entryTotals.profit - standaloneExp,
+    };
+
     const best   = mes.reduce((a,e)=>calcEntry(e,SP,CP).grossProfit>calcEntry(a,SP,CP).grossProfit?e:a);
     const sorted = [...mes].sort((a,b)=>a.date.localeCompare(b.date));
     const spark  = sorted.map(e=>calcEntry(e,SP,CP).grossProfit);
@@ -3394,13 +3440,13 @@ export default function GasLedgerApp() {
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost}/>}
+        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/>}
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
-        {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost}/></Gate>}
-        {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey}/></Gate>}
+        {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
+        {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
-        {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
+        {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
         {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen("dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
