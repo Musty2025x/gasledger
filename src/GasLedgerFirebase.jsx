@@ -2179,6 +2179,14 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
   );
 };
 
+// Top-level sub-screen wrapper — must be outside SettingsScreen to prevent remount on keystrokes
+const SettingsSubScreen = ({ title, onBack, children }) => (
+  <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
+    <TopBar title={title} dark={false} left={<BackBtn onClick={onBack} dark={false}/>}/>
+    <div style={{flex:1,overflow:"auto",padding:"20px 16px 32px"}}>{children}</div>
+  </div>
+);
+
 // ═══════════════════════════════════════════════════════════════
 // SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════════════
@@ -2272,19 +2280,14 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
     finally { setPwLd(false); }
   };
 
-  // ── shared sub-screen shell ──────────────────────────────
-  const SubScreen = ({ title, children }) => (
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
-      <TopBar title={title} dark={false} left={
-        <BackBtn onClick={()=>{ setSub(null); setNameMsg(""); setEmailErr(""); setEmailOk(false); setPwErr(""); setPwOk(false); }} dark={false}/>
-      }/>
-      <div style={{flex:1,overflow:"auto",padding:"20px 16px 32px"}}>{children}</div>
-    </div>
-  );
+  // ── shared sub-screen shell — defined outside to prevent remount ──
+  const backFromSub = useCallback(() => {
+    setSub(null); setNameMsg(""); setEmailErr(""); setEmailOk(false); setPwErr(""); setPwOk(false);
+  }, []);
 
   // ── Plant name sub-screen ────────────────────────────────
   if (sub === "plant") return (
-    <SubScreen title="Plant name">
+    <SettingsSubScreen title="Plant name" onBack={backFromSub}>
       <p style={{fontSize:13,color:T.muted,fontFamily:F,lineHeight:1.6,marginBottom:20}}>This name appears on your dashboard and all reports.</p>
       <Input label="Plant name" value={plantName} onChange={setPlantName} placeholder="e.g. Hageez Gas Plant" onEnter={savePlantName}/>
       {nameMsg && (
@@ -2293,12 +2296,12 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
         </div>
       )}
       <Btn label="Save plant name" onClick={savePlantName} loading={savingName} disabled={!plantName.trim()||plantName.trim()===profile?.displayName} size="lg" icon="check"/>
-    </SubScreen>
+    </SettingsSubScreen>
   );
 
   // ── Change email sub-screen ──────────────────────────────
   if (sub === "email") return (
-    <SubScreen title="Change email">
+    <SettingsSubScreen title="Change email" onBack={backFromSub}>
       {emailOk ? (
         <div style={{textAlign:"center",padding:"32px 0"}}>
           <div style={{width:48,height:48,borderRadius:"50%",background:`${T.success}15`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
@@ -2329,12 +2332,12 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
         {emailErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"10px 12px",marginBottom:14,fontSize:13,color:T.danger}}>{emailErr}</div>}
         <Btn label="Update email" onClick={saveEmail} loading={emailLd} disabled={!newEmail||!emailPw} size="lg" icon="check"/>
       </>)}
-    </SubScreen>
+    </SettingsSubScreen>
   );
 
   // ── Change password sub-screen ───────────────────────────
   if (sub === "password") return (
-    <SubScreen title="Change password">
+    <SettingsSubScreen title="Change password" onBack={backFromSub}>
       {pwOk ? (
         <div style={{textAlign:"center",padding:"32px 0"}}>
           <div style={{width:48,height:48,borderRadius:"50%",background:`${T.success}15`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
@@ -2367,7 +2370,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
         {pwErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"10px 12px",marginBottom:14,fontSize:13,color:T.danger}}>{pwErr}</div>}
         <Btn label="Update password" onClick={savePassword} loading={pwLd} disabled={!curPw||!newPw||!confPw} size="lg" icon="check"/>
       </>)}
-    </SubScreen>
+    </SettingsSubScreen>
   );
 
   // ── Staff management state ───────────────────────────────
@@ -2404,22 +2407,28 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
 
   // ── Staff sub-screen ─────────────────────────────────────
   if (sub === "staff") return (
-    <SubScreen title="Staff access">
+    <SettingsSubScreen title="Staff access" onBack={backFromSub}>
       {/* Invite form */}
       <div style={{marginBottom:20}}>
         <p style={{fontSize:13,color:T.muted,lineHeight:1.6,marginBottom:16}}>
           Invite staff by email. They'll register or log in with that email and be automatically linked to this plant.
         </p>
-        <Input
-          label="Staff email address"
-          value={inviteEmail}
-          onChange={v=>{setInviteEmail(v);setInviteErr("");setInviteOk("");}}
-          type="email"
-          placeholder="staff@example.com"
-          onEnter={sendInvite}
-        />
-        {inviteErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"9px 12px",marginBottom:12,fontSize:13,color:T.danger}}>{inviteErr}</div>}
-        {inviteOk &&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"9px 12px",marginBottom:12,fontSize:13,color:T.success}}>{inviteOk}</div>}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:5,fontFamily:F}}>Staff email address</div>
+          <input
+            autoFocus
+            type="email"
+            value={inviteEmail}
+            onChange={e=>{setInviteEmail(e.target.value);setInviteErr("");setInviteOk("");}}
+            onKeyDown={e=>e.key==="Enter"&&sendInvite()}
+            placeholder="staff@example.com"
+            style={{width:"100%",padding:"11px 12px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
+            onFocus={e=>e.target.style.borderColor=T.primary}
+            onBlur={e=>e.target.style.borderColor=T.borderMid}
+          />
+        </div>
+        {inviteErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"9px 12px",marginBottom:12,fontSize:13,color:T.danger,fontFamily:F}}>{inviteErr}</div>}
+        {inviteOk &&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"9px 12px",marginBottom:12,fontSize:13,color:T.success,fontFamily:F}}>{inviteOk}</div>}
         <Btn label="Send invite" onClick={sendInvite} loading={inviteLd} disabled={!inviteEmail.trim()} size="lg" icon="invite"/>
       </div>
 
@@ -2476,12 +2485,12 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
           No staff yet. Send an invite above.
         </div>
       )}
-    </SubScreen>
+    </SettingsSubScreen>
   );
 
   // ── Default cost price sub-screen ───────────────────────
   if (sub === "cost") return (
-    <SubScreen title="Default cost price" children={<>
+    <SettingsSubScreen title="Default cost price" onBack={backFromSub}>
       <p style={{fontSize:13,color:T.muted,lineHeight:1.6,marginBottom:16,fontFamily:F}}>
         Set the default purchase price per kg from your supplier. This is used to calculate gross profit and COGS across all P&L reports.
       </p>
@@ -2493,7 +2502,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut }) => {
         <div style={{background:costMsg.includes("set")?`${T.success}10`:`${T.danger}10`,borderRadius:R.md,padding:"9px 12px",marginBottom:14,fontSize:13,color:costMsg.includes("set")?T.success:T.danger,fontFamily:F}}>{costMsg}</div>
       )}
       <Btn label="Save default cost price" onClick={saveDefCost} loading={savingCost} disabled={!defCost||Number(defCost)<=0} size="lg" icon="check"/>
-    </>}/>
+    </SettingsSubScreen>
   );
 
   // ── Main settings list ───────────────────────────────────
