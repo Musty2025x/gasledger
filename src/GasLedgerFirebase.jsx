@@ -3256,7 +3256,8 @@ const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back 
   const [note,      setNote]      = useState("");
   const [err,       setErr]       = useState("");
   const [ld,        setLd]        = useState(false);
-  const [filterCat, setFilterCat] = useState("All");
+  const [filterCat,    setFilterCat]    = useState("All");
+  const [sourceFilter, setSourceFilter] = useState("all"); // all | owner | staff | entry
 
   const openNew  = () => { setEditing(null); setCat(""); setAmt(""); setDate(new Date().toISOString().split("T")[0]); setNote(""); setErr(""); setShowModal(true); };
   const openEdit = (e) => { setEditing(e); setCat(e.category); setAmt(String(e.amount)); setDate(e.date); setNote(e.note||""); setErr(""); setShowModal(true); };
@@ -3306,9 +3307,20 @@ const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back 
   const allExpenses = [...standaloneList, ...entryExpenseList]
     .sort((a,b) => b.date.localeCompare(a.date));
 
-  const allCats   = ["All", ...Array.from(new Set(allExpenses.map(e=>e.category))).sort()];
-  const filtered  = filterCat==="All" ? allExpenses : allExpenses.filter(e=>e.category===filterCat);
-  const total     = filtered.reduce((s,e)=>s+e.amount, 0);
+  // Source breakdown totals
+  const ownerTotal = allExpenses.filter(e=>!e._source||e._source==="standalone").reduce((s,e)=>s+e.amount,0);
+  const staffTotal = allExpenses.filter(e=>e._source==="staff").reduce((s,e)=>s+e.amount,0);
+  const entryTotal = allExpenses.filter(e=>e._source==="entry").reduce((s,e)=>s+e.amount,0);
+
+  // Apply source filter first, then category filter
+  const sourceFiltered = sourceFilter==="all" ? allExpenses
+    : sourceFilter==="owner" ? allExpenses.filter(e=>!e._source||e._source==="standalone")
+    : sourceFilter==="staff" ? allExpenses.filter(e=>e._source==="staff")
+    : allExpenses.filter(e=>e._source==="entry");
+
+  const allCats = ["All", ...Array.from(new Set(sourceFiltered.map(e=>e.category))).sort()];
+  const filtered = filterCat==="All" ? sourceFiltered : sourceFiltered.filter(e=>e.category===filterCat);
+  const total    = filtered.reduce((s,e)=>s+e.amount, 0);
 
   // Group by month
   const byMonth = {};
@@ -3338,14 +3350,28 @@ const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back 
       />
 
       {/* Summary bar */}
-      <div style={{background:T.primary,padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,.5)",fontFamily:F}}>{filterCat==="All"?"All categories":filterCat} · {filtered.length} expense{filtered.length!==1?"s":""}</div>
-          <div style={{fontSize:18,fontWeight:700,color:T.gold,fontFamily:F}}>−{fmt(total)}</div>
+      <div style={{background:T.primary,padding:"12px 16px",flexShrink:0}}>
+        <div style={{fontSize:11,color:"rgba(255,255,255,.5)",fontFamily:F,marginBottom:2}}>
+          {sourceFilter==="all"?"All sources":sourceFilter==="owner"?"Owner expenses":sourceFilter==="staff"?"Staff expenses":"Entry expenses"} · {filtered.length} item{filtered.length!==1?"s":""}
+        </div>
+        <div style={{fontSize:22,fontWeight:700,color:T.gold,fontFamily:F,marginBottom:10}}>−{fmt(total)}</div>
+        {/* Source breakdown strip */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+          {[
+            {key:"owner", label:"Owner",   val:ownerTotal, color:"rgba(255,255,255,.9)"},
+            {key:"staff", label:"Staff",   val:staffTotal, color:T.gold},
+            {key:"entry", label:"Entries", val:entryTotal, color:"rgba(255,255,255,.7)"},
+          ].map(s=>(
+            <div key={s.key} onClick={()=>{setSourceFilter(sourceFilter===s.key?"all":s.key);setFilterCat("All");}}
+              style={{background:sourceFilter===s.key?"rgba(255,255,255,.15)":"rgba(255,255,255,.06)",borderRadius:R.md,padding:"7px 8px",cursor:"pointer",border:`1px solid ${sourceFilter===s.key?"rgba(255,255,255,.3)":"transparent"}`,transition:"all .15s"}}>
+              <div style={{fontSize:10,color:"rgba(255,255,255,.5)",fontFamily:F,marginBottom:2,textTransform:"uppercase",letterSpacing:.4}}>{s.label}</div>
+              <div style={{fontSize:13,fontWeight:600,color:s.color,fontFamily:F}}>−{fmt(s.val)}</div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Category filter chips */}
+      {/* Category filter chips — scrollable */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"8px 12px",overflowX:"auto",display:"flex",gap:6,flexShrink:0,WebkitOverflowScrolling:"touch"}}>
         {allCats.map(c=>(
           <button key={c} onClick={()=>setFilterCat(c)}
@@ -3646,7 +3672,7 @@ const MonthlySummaryScreen = ({ entries, prices=[], deliveries=[], back, goMonth
 // Staff records shift expenses: generator fuel, gas gifts, petty cash
 // Stored in the same standaloneExpenses collection — visible to owner
 // ═══════════════════════════════════════════════════════════════
-const StaffExpenseScreen = ({ onAdd, submittedBy, back, todayExpenses=[] }) => {
+const StaffExpenseScreen = ({ onAdd, submittedBy, back, allExpenses=[] }) => {
   const today = new Date().toISOString().split("T")[0];
   const CATS  = ["Generator Fuel","Gas Gift","Petty Cash","Transport","Maintenance","Repairs","Other"];
 
@@ -3659,74 +3685,60 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, todayExpenses=[] }) => {
   const [ok,   setOk]   = useState("");
 
   const save = async () => {
-    if (!cat.trim()) { setErr("Select or enter a category."); return; }
+    if (!cat) { setErr("Please select a category."); return; }
     if (!amt || Number(amt) <= 0) { setErr("Enter a valid amount."); return; }
     setLd(true); setErr(""); setOk("");
     try {
-      await onAdd({
-        date,
-        category:    cat.trim(),
-        amount:      Number(amt),
-        note:        note.trim(),
-        submittedBy: submittedBy||"",
-        source:      "staff",
-      });
-      setOk(`₦${Number(amt).toLocaleString("en-NG")} ${cat} recorded.`);
-      setCat(""); setAmt(""); setNote("");
+      await onAdd({ date, category:cat, amount:Number(amt), note:note.trim(), submittedBy:submittedBy||"", source:"staff" });
+      setOk(`✓ ${cat} — ₦${Number(amt).toLocaleString("en-NG")} recorded`);
+      setCat(""); setAmt(""); setNote(""); setDate(today);
     } catch(e) { setErr(e.message || "Failed. Try again."); }
     finally { setLd(false); }
   };
 
-  // Today's expenses submitted by staff
-  const todayTotal = todayExpenses.reduce((s,e)=>s+(e.amount||0), 0);
+  // All expenses submitted by this staff member
+  const myExpenses = allExpenses
+    .filter(e => e.submittedBy === submittedBy && e.source === "staff")
+    .sort((a,b) => b.date.localeCompare(a.date));
+  const myTotal = myExpenses.reduce((s,e)=>s+(e.amount||0), 0);
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
       <TopBar title="Shift expenses" dark={false} left={<BackBtn onClick={back} dark={false}/>}/>
-
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 32px"}}>
 
-        {/* What this is for */}
-        <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
-          <Icon n="cash" s={18} c={T.primary}/>
+        {/* Info */}
+        <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:14,display:"flex",gap:10,alignItems:"flex-start"}}>
+          <Icon n="cash" s={16} c={T.primary}/>
           <div style={{fontSize:12,color:T.text2,lineHeight:1.6}}>
-            Record any cash spent during your shift — generator fuel, gas given as gift, petty cash. The owner sees all entries.
+            Record cash spent during your shift. Select <strong>Gas Gift</strong> and use Note to say who received it (e.g. "5kg for Mama"). The owner sees all entries.
           </div>
         </div>
 
-        {/* Today's total */}
-        {todayExpenses.length>0&&(
-          <Card pad="12px 14px" style={{marginBottom:16,background:T.primary,border:"none"}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,.5)",marginBottom:4,textTransform:"uppercase",letterSpacing:.6}}>Today's expenses</div>
-            <div style={{fontSize:22,fontWeight:700,color:T.gold}}>−{fmt(todayTotal)}</div>
-            <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
-              {todayExpenses.map((e,i)=>(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"rgba(255,255,255,.7)"}}>
-                  <span>{e.category}{e.note?` · ${e.note}`:""}</span>
-                  <span style={{fontWeight:600}}>−{fmt(e.amount)}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
+        {/* Success toast */}
+        {ok&&(
+          <div style={{background:T.primary,borderRadius:R.lg,padding:"11px 14px",marginBottom:14,display:"flex",gap:10,alignItems:"center"}}>
+            <Icon n="check" s={15} c={T.gold}/>
+            <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>{ok}</span>
+          </div>
         )}
 
-        {/* Category */}
+        {/* Category — fixed chips ONLY, no free text to keep categories clean */}
         <SLabel mt={0}>Category</SLabel>
         <Card pad="14px" style={{marginBottom:12}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {CATS.map(c=>(
               <button key={c} onClick={()=>{setCat(c);setErr("");setOk("");}}
-                style={{padding:"6px 12px",background:cat===c?T.primary:T.bg2,color:cat===c?"#fff":T.muted,border:"none",borderRadius:R.pill,fontSize:12,fontWeight:cat===c?600:400,cursor:"pointer",fontFamily:F,transition:"all .12s"}}>
+                style={{padding:"8px 14px",background:cat===c?T.primary:T.bg2,color:cat===c?"#fff":T.text,border:`1.5px solid ${cat===c?T.primary:T.border}`,borderRadius:R.pill,fontSize:12,fontWeight:cat===c?600:400,cursor:"pointer",fontFamily:F,transition:"all .12s"}}>
                 {c}
               </button>
             ))}
           </div>
-          <input value={cat} onChange={e=>{setCat(e.target.value);setErr("");setOk("");}}
-            placeholder="Or type a category…"
-            style={{width:"100%",padding:"10px 12px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:13,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
-            onFocus={e=>e.target.style.borderColor=T.primary}
-            onBlur={e=>e.target.style.borderColor=T.borderMid}
-          />
+          {cat==="Gas Gift"&&(
+            <div style={{marginTop:10,fontSize:11,color:T.muted,background:T.bg,borderRadius:R.md,padding:"7px 10px"}}>
+              💡 Use Note below to say who received the gas (e.g. "5kg for Mama")
+            </div>
+          )}
         </Card>
 
         {/* Amount */}
@@ -3734,10 +3746,9 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, todayExpenses=[] }) => {
         <Card pad="14px" style={{marginBottom:12}}>
           <div style={{position:"relative",marginBottom:8}}>
             <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,color:T.muted,pointerEvents:"none"}}>₦</span>
-            <input value={amt} onChange={e=>{setAmt(e.target.value);setErr("");setOk("");}} type="number" placeholder="0"
+            <input value={amt} onChange={e=>{setAmt(e.target.value);setErr("");setOk("");}} type="number" placeholder="Enter amount"
               style={{width:"100%",padding:"11px 12px 11px 28px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:15,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
-              onFocus={e=>e.target.style.borderColor=T.primary}
-              onBlur={e=>e.target.style.borderColor=T.borderMid}
+              onFocus={e=>e.target.style.borderColor=T.primary} onBlur={e=>e.target.style.borderColor=T.borderMid}
             />
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -3750,27 +3761,50 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, todayExpenses=[] }) => {
           </div>
         </Card>
 
+        {/* Note — required for Gas Gift, optional for others */}
+        <SLabel>Note {cat==="Gas Gift"?"— who received it?":"(optional)"}</SLabel>
+        <Card pad="12px 14px" style={{marginBottom:12,border:cat==="Gas Gift"?`1.5px solid ${T.primary}`:undefined}}>
+          <input value={note} onChange={e=>setNote(e.target.value)}
+            placeholder={cat==="Gas Gift"?"e.g. 5kg for Mama, 3kg for customer":"e.g. Generator ran 4hrs, morning delivery tip…"}
+            style={{width:"100%",padding:"8px 0",border:"none",fontSize:13,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
+          />
+        </Card>
+
         {/* Date */}
         <SLabel>Date</SLabel>
-        <Card pad="12px 14px" style={{marginBottom:12}}>
+        <Card pad="12px 14px" style={{marginBottom:16}}>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)}
             style={{width:"100%",padding:"8px 0",border:"none",fontSize:14,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
           />
         </Card>
 
-        {/* Note */}
-        <SLabel>Note (optional)</SLabel>
-        <Card pad="12px 14px" style={{marginBottom:16}}>
-          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. 5kg gas for Mama, generator ran 4hrs…"
-            style={{width:"100%",padding:"8px 0",border:"none",fontSize:13,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
-          />
-        </Card>
-
         {err&&<ErrBanner msg={err}/>}
-        {ok&&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"10px 14px",marginBottom:12,fontSize:13,color:T.success,fontFamily:F,display:"flex",gap:8,alignItems:"center"}}><Icon n="check" s={14} c={T.success}/>{ok}</div>}
 
-        <Btn label="Record expense" onClick={save} loading={ld} disabled={!cat.trim()||!amt||Number(amt)<=0} size="lg" icon="check"/>
-        <div style={{marginTop:8}}><Btn label="Cancel" onClick={back} variant="outline" size="lg"/></div>
+        <Btn label="Record expense" onClick={save} loading={ld}
+          disabled={!cat||!amt||Number(amt)<=0} size="lg" icon="check"/>
+
+        {/* My expense history */}
+        {myExpenses.length>0&&(<>
+          <div style={{marginTop:24,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:12,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,fontFamily:F}}>My expenses</span>
+            <span style={{fontSize:13,fontWeight:700,color:T.danger,fontFamily:F}}>−{fmt(myTotal)}</span>
+          </div>
+          <Card>
+            {myExpenses.slice(0,15).map((e,i,arr)=>(
+              <div key={e.id||i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+                <div style={{width:36,height:36,borderRadius:R.md,background:`${T.warning}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:10,fontWeight:700,color:T.warning,fontFamily:F}}>{(e.category||"?").slice(0,2).toUpperCase()}</span>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,color:T.text,fontFamily:F}}>{e.category}</div>
+                  <div style={{fontSize:11,color:T.muted,marginTop:1,fontFamily:F}}>{fmtD(e.date)}{e.note?` · ${e.note}`:""}</div>
+                </div>
+                <div style={{fontSize:13,fontWeight:600,color:T.danger,fontFamily:F,flexShrink:0}}>−{fmt(e.amount)}</div>
+              </div>
+            ))}
+          </Card>
+        </>)}
+
       </div>
     </div>
   );
@@ -4062,7 +4096,7 @@ export default function GasLedgerApp() {
         {screen==="history"     && <HistoryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen(prevScreen||"dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
         {screen==="staffaccount"&& <StaffAccountScreen user={user} profile={profile} onSignOut={signOutUser} back={()=>setScreen("dashboard")}/> }
-        {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} submittedBy={user?.uid} back={()=>setScreen("dashboard")} todayExpenses={standaloneExpenses.filter(e=>e.date===new Date().toISOString().split("T")[0]&&e.submittedBy===user?.uid)}/>}
+        {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} submittedBy={user?.uid} back={()=>setScreen("dashboard")} allExpenses={standaloneExpenses}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
         {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost}/></Gate>}
       </div>
