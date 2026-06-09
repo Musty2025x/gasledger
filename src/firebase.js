@@ -34,7 +34,6 @@ const firebaseConfig = {
   messagingSenderId: "822780170310",
   appId: "1:822780170310:web:d820d651d8609c16f1ba47"
 };
-
 const app  = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db   = getFirestore(app);
@@ -465,23 +464,35 @@ export const useStandaloneExpenses = (plantId) => {
   return { data, loading };
 };
 
-// Staff-specific expenses hook — queries only by submittedBy to match Firestore rules
-// Staff cannot do a full collection scan, only their own expenses
+// Staff-specific expenses hook — fetches only this staff member's expenses
+// Also catches older expenses saved with empty submittedBy (before UID tracking)
 export const useStaffExpenses = (plantId, uid) => {
   const [data, setData]       = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!plantId || !uid) return;
-    const q = query(
-      standaloneExpensesCol(plantId),
-      where("submittedBy", "==", uid),
-      orderBy("date", "desc")
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    }, () => setLoading(false));
-    return unsub;
+
+    let combined = [];
+    let loaded = 0;
+    const tryDone = () => { if (++loaded === 2) { setData([...combined].sort((a,b)=>b.date?.localeCompare(a.date)||0)); setLoading(false); } };
+
+    // Query 1: expenses with this staff's UID
+    const q1 = query(standaloneExpensesCol(plantId), where("submittedBy", "==", uid), where("source", "==", "staff"));
+    const unsub1 = onSnapshot(q1, snap => {
+      combined = combined.filter(e => e._q !== "q1");
+      combined.push(...snap.docs.map(d => ({ id: d.id, ...d.data(), _q: "q1" })));
+      tryDone();
+    }, () => tryDone());
+
+    // Query 2: older expenses with empty submittedBy (recorded before UID tracking)
+    const q2 = query(standaloneExpensesCol(plantId), where("submittedBy", "==", ""), where("source", "==", "staff"));
+    const unsub2 = onSnapshot(q2, snap => {
+      combined = combined.filter(e => e._q !== "q2");
+      combined.push(...snap.docs.map(d => ({ id: d.id, ...d.data(), _q: "q2" })));
+      tryDone();
+    }, () => tryDone());
+
+    return () => { unsub1(); unsub2(); };
   }, [plantId, uid]);
   return { data, loading };
 };
