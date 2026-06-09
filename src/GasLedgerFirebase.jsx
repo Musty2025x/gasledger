@@ -3396,7 +3396,8 @@ const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back 
               </div>
               <Card>
                 {byMonth[mKey].map((e,i,arr)=>{
-                  const canEdit = !e._source || e._source === "standalone";
+                  // Owner can edit standalone + staff expenses. Entry expenses are read-only (edit from the entry itself)
+                  const canEdit = e._source !== "entry";
                   return (
                   <div key={e.id} onClick={()=>canEdit&&openEdit(e)}
                     style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:canEdit?"pointer":"default",transition:"background .12s"}}
@@ -3420,7 +3421,7 @@ const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back 
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontSize:14,fontWeight:700,color:T.danger}}>−{fmt(e.amount)}</div>
-                      <div style={{fontSize:10,color:T.muted,marginTop:1}}>{canEdit?"tap to edit":"view only"}</div>
+                      <div style={{fontSize:10,color:T.muted,marginTop:1}}>{canEdit?"tap to edit":"from daily entry"}</div>
                     </div>
                   </div>
                   );
@@ -3672,7 +3673,7 @@ const MonthlySummaryScreen = ({ entries, prices=[], deliveries=[], back, goMonth
 // Staff records shift expenses: generator fuel, gas gifts, petty cash
 // Stored in the same standaloneExpenses collection — visible to owner
 // ═══════════════════════════════════════════════════════════════
-const StaffExpenseScreen = ({ onAdd, submittedBy, back, allExpenses=[] }) => {
+const StaffExpenseScreen = ({ onAdd, onUpdate, onDelete, submittedBy, back, allExpenses=[] }) => {
   const today = new Date().toISOString().split("T")[0];
   const CATS  = ["Generator Fuel","Gas Gift","Petty Cash","Transport","Maintenance","Repairs","Other"];
 
@@ -3683,6 +3684,42 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, allExpenses=[] }) => {
   const [ld,   setLd]   = useState(false);
   const [err,  setErr]  = useState("");
   const [ok,   setOk]   = useState("");
+
+  // Edit modal state
+  const [editItem,  setEditItem]  = useState(null);
+  const [editCat,   setEditCat]   = useState("");
+  const [editAmt,   setEditAmt]   = useState("");
+  const [editNote,  setEditNote]  = useState("");
+  const [editDate,  setEditDate]  = useState("");
+  const [editLd,    setEditLd]    = useState(false);
+  const [editErr,   setEditErr]   = useState("");
+
+  const openEdit = (e) => {
+    setEditItem(e);
+    setEditCat(e.category);
+    setEditAmt(String(e.amount));
+    setEditNote(e.note||"");
+    setEditDate(e.date);
+    setEditErr("");
+  };
+
+  const saveEdit = async () => {
+    if (!editAmt || Number(editAmt)<=0) { setEditErr("Enter a valid amount."); return; }
+    setEditLd(true); setEditErr("");
+    try {
+      await onUpdate(editItem.id, { category:editCat, amount:Number(editAmt), note:editNote.trim(), date:editDate });
+      setEditItem(null);
+    } catch(e) { setEditErr(e.message||"Failed. Try again."); }
+    finally { setEditLd(false); }
+  };
+
+  const deleteEdit = async () => {
+    if (!window.confirm(`Delete "${editCat}" expense of ₦${Number(editAmt).toLocaleString("en-NG")}?`)) return;
+    setEditLd(true);
+    try { await onDelete(editItem.id); setEditItem(null); }
+    catch(e) { setEditErr(e.message||"Failed."); }
+    finally { setEditLd(false); }
+  };
 
   const save = async () => {
     if (!cat) { setErr("Please select a category."); return; }
@@ -3697,8 +3734,9 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, allExpenses=[] }) => {
   };
 
   // All expenses submitted by this staff member
+  // Also shows older expenses with empty submittedBy (recorded before UID tracking)
   const myExpenses = allExpenses
-    .filter(e => e.submittedBy === submittedBy && e.source === "staff")
+    .filter(e => e.source === "staff" && (e.submittedBy === submittedBy || !e.submittedBy))
     .sort((a,b) => b.date.localeCompare(a.date));
   const myTotal = myExpenses.reduce((s,e)=>s+(e.amount||0), 0);
 
@@ -3761,20 +3799,20 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, allExpenses=[] }) => {
           </div>
         </Card>
 
-        {/* Note — required for Gas Gift, optional for others */}
-        <SLabel>Note {cat==="Gas Gift"?"— who received it?":"(optional)"}</SLabel>
-        <Card pad="12px 14px" style={{marginBottom:12,border:cat==="Gas Gift"?`1.5px solid ${T.primary}`:undefined}}>
-          <input value={note} onChange={e=>setNote(e.target.value)}
-            placeholder={cat==="Gas Gift"?"e.g. 5kg for Mama, 3kg for customer":"e.g. Generator ran 4hrs, morning delivery tip…"}
-            style={{width:"100%",padding:"8px 0",border:"none",fontSize:13,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
+        {/* Date */}
+        <SLabel>Date</SLabel>
+        <Card pad="12px 14px" style={{marginBottom:12}}>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+            style={{width:"100%",padding:"8px 0",border:"none",fontSize:14,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
           />
         </Card>
 
-        {/* Date */}
-        <SLabel>Date</SLabel>
-        <Card pad="12px 14px" style={{marginBottom:16}}>
-          <input type="date" value={date} onChange={e=>setDate(e.target.value)}
-            style={{width:"100%",padding:"8px 0",border:"none",fontSize:14,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
+        {/* Note — required for Gas Gift, optional for others */}
+        <SLabel>Note {cat==="Gas Gift"?"— who received it?":"(optional)"}</SLabel>
+        <Card pad="12px 14px" style={{marginBottom:16,border:cat==="Gas Gift"?`1.5px solid ${T.primary}`:undefined}}>
+          <input value={note} onChange={e=>setNote(e.target.value)}
+            placeholder={cat==="Gas Gift"?"e.g. 5kg for Mama, 3kg for customer":"e.g. Generator ran 4hrs, morning delivery tip…"}
+            style={{width:"100%",padding:"8px 0",border:"none",fontSize:13,fontFamily:F,color:T.text,outline:"none",background:"transparent",boxSizing:"border-box"}}
           />
         </Card>
 
@@ -3790,8 +3828,11 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, allExpenses=[] }) => {
             <span style={{fontSize:13,fontWeight:700,color:T.danger,fontFamily:F}}>−{fmt(myTotal)}</span>
           </div>
           <Card>
-            {myExpenses.slice(0,15).map((e,i,arr)=>(
-              <div key={e.id||i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+            {myExpenses.slice(0,20).map((e,i,arr)=>(
+              <div key={e.id||i} onClick={()=>e.id&&openEdit(e)}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:e.id?"pointer":"default",transition:"background .12s"}}
+                onMouseEnter={ev=>{if(e.id)ev.currentTarget.style.background=T.bg;}}
+                onMouseLeave={ev=>ev.currentTarget.style.background="transparent"}>
                 <div style={{width:36,height:36,borderRadius:R.md,background:`${T.warning}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   <span style={{fontSize:10,fontWeight:700,color:T.warning,fontFamily:F}}>{(e.category||"?").slice(0,2).toUpperCase()}</span>
                 </div>
@@ -3799,13 +3840,71 @@ const StaffExpenseScreen = ({ onAdd, submittedBy, back, allExpenses=[] }) => {
                   <div style={{fontSize:13,fontWeight:500,color:T.text,fontFamily:F}}>{e.category}</div>
                   <div style={{fontSize:11,color:T.muted,marginTop:1,fontFamily:F}}>{fmtD(e.date)}{e.note?` · ${e.note}`:""}</div>
                 </div>
-                <div style={{fontSize:13,fontWeight:600,color:T.danger,fontFamily:F,flexShrink:0}}>−{fmt(e.amount)}</div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:T.danger,fontFamily:F}}>−{fmt(e.amount)}</div>
+                  {e.id&&<div style={{fontSize:10,color:T.muted,fontFamily:F}}>tap to edit</div>}
+                </div>
               </div>
             ))}
           </Card>
         </>)}
 
       </div>
+
+      {/* Edit expense modal */}
+      {editItem&&(
+        <div style={{position:"absolute",inset:0,background:T.overlay,display:"flex",alignItems:"flex-end",zIndex:100}}>
+          <div style={{background:T.surface,borderRadius:"16px 16px 0 0",padding:"20px 16px 32px",width:"100%",maxHeight:"85%",overflowY:"auto",fontFamily:F}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <span style={{fontSize:16,fontWeight:600,color:T.text}}>Edit expense</span>
+              <button onClick={()=>setEditItem(null)} style={{background:T.bg2,border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <Icon n="close" s={14} c={T.muted}/>
+              </button>
+            </div>
+
+            {/* Category chips */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:6}}>Category</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+              {CATS.map(c=>(
+                <button key={c} onClick={()=>setEditCat(c)}
+                  style={{padding:"6px 12px",background:editCat===c?T.primary:T.bg2,color:editCat===c?"#fff":T.text,border:`1.5px solid ${editCat===c?T.primary:T.border}`,borderRadius:R.pill,fontSize:12,fontWeight:editCat===c?600:400,cursor:"pointer",fontFamily:F}}>
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            {/* Amount */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:6}}>Amount</div>
+            <div style={{position:"relative",marginBottom:14}}>
+              <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,color:T.muted,pointerEvents:"none"}}>₦</span>
+              <input value={editAmt} onChange={e=>setEditAmt(e.target.value)} type="number"
+                style={{width:"100%",padding:"11px 12px 11px 28px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:15,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.primary} onBlur={e=>e.target.style.borderColor=T.borderMid}
+              />
+            </div>
+
+            {/* Date */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:6}}>Date</div>
+            <input type="date" value={editDate} onChange={e=>setEditDate(e.target.value)}
+              style={{width:"100%",padding:"10px 12px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:14,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box",marginBottom:14}}
+            />
+
+            {/* Note */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:6}}>Note (optional)</div>
+            <input value={editNote} onChange={e=>setEditNote(e.target.value)}
+              placeholder="e.g. 5kg for Mama, generator ran 4hrs…"
+              style={{width:"100%",padding:"10px 12px",border:`1.5px solid ${T.borderMid}`,borderRadius:R.md,fontSize:13,fontFamily:F,color:T.text,outline:"none",background:T.surface,boxSizing:"border-box",marginBottom:14}}
+            />
+
+            {editErr&&<div style={{background:`${T.danger}10`,borderRadius:R.md,padding:"9px 12px",fontSize:12,color:T.danger,marginBottom:12}}>{editErr}</div>}
+
+            <Btn label="Save changes" onClick={saveEdit} loading={editLd} size="lg" icon="check"/>
+            <div style={{marginTop:8}}>
+              <Btn label="Delete this expense" onClick={deleteEdit} variant="danger" size="lg" loading={editLd}/>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -4096,7 +4195,7 @@ export default function GasLedgerApp() {
         {screen==="history"     && <HistoryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen(prevScreen||"dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
         {screen==="staffaccount"&& <StaffAccountScreen user={user} profile={profile} onSignOut={signOutUser} back={()=>setScreen("dashboard")}/> }
-        {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} submittedBy={user?.uid} back={()=>setScreen("dashboard")} allExpenses={standaloneExpenses}/>}
+        {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} submittedBy={user?.uid} back={()=>setScreen("dashboard")} allExpenses={standaloneExpenses}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
         {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost}/></Gate>}
       </div>
