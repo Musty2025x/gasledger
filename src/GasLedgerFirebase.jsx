@@ -3245,7 +3245,7 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
 // ═══════════════════════════════════════════════════════════════
 // EXPENSES SCREEN — standalone expense tracker with date
 // ═══════════════════════════════════════════════════════════════
-const ExpensesScreen = ({ expenses, onAdd, onUpdate, onDelete, back }) => {
+const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back }) => {
   const CATS = ["Salary","Utility","Maintenance","Repairs","Transport","Miscellaneous","Security","Generator","Office","Rent","Other"];
 
   const [showModal, setShowModal] = useState(false);
@@ -3283,8 +3283,31 @@ const ExpensesScreen = ({ expenses, onAdd, onUpdate, onDelete, back }) => {
   };
 
   // Filter + group by month
-  const allCats   = ["All", ...Array.from(new Set(expenses.map(e=>e.category))).sort()];
-  const filtered  = filterCat==="All" ? expenses : expenses.filter(e=>e.category===filterCat);
+  // ── Merge all expense sources ─────────────────────────────
+  // 1. Standalone (owner + staff shift)
+  const standaloneList = expenses.map(e => ({
+    ...e,
+    _source: e.source === "staff" ? "staff" : "standalone",
+    _label:  e.source === "staff" ? "Staff expense" : null,
+  }));
+  // 2. Inline expenses from daily entries
+  const entryExpenseList = entries.flatMap(entry =>
+    (entry.expenses||[]).map((exp,i) => ({
+      id:       `${entry.id}_exp_${i}`,
+      date:      entry.date,
+      category:  exp.cat,
+      amount:    exp.amt,
+      note:      "",
+      _source:   "entry",
+      _label:    "Daily entry",
+    }))
+  );
+  // Merge + sort by date descending
+  const allExpenses = [...standaloneList, ...entryExpenseList]
+    .sort((a,b) => b.date.localeCompare(a.date));
+
+  const allCats   = ["All", ...Array.from(new Set(allExpenses.map(e=>e.category))).sort()];
+  const filtered  = filterCat==="All" ? allExpenses : allExpenses.filter(e=>e.category===filterCat);
   const total     = filtered.reduce((s,e)=>s+e.amount, 0);
 
   // Group by month
@@ -3346,28 +3369,36 @@ const ExpensesScreen = ({ expenses, onAdd, onUpdate, onDelete, back }) => {
                 <span style={{fontSize:12,fontWeight:700,color:T.danger}}>−{fmt(byMonth[mKey].reduce((s,e)=>s+e.amount,0))}</span>
               </div>
               <Card>
-                {byMonth[mKey].map((e,i,arr)=>(
-                  <div key={e.id} onClick={()=>openEdit(e)}
-                    style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .12s"}}
-                    onMouseEnter={ev=>ev.currentTarget.style.background=T.bg}
+                {byMonth[mKey].map((e,i,arr)=>{
+                  const canEdit = !e._source || e._source === "standalone";
+                  return (
+                  <div key={e.id} onClick={()=>canEdit&&openEdit(e)}
+                    style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:canEdit?"pointer":"default",transition:"background .12s"}}
+                    onMouseEnter={ev=>{if(canEdit)ev.currentTarget.style.background=T.bg;}}
                     onMouseLeave={ev=>ev.currentTarget.style.background="transparent"}>
                     {/* Category badge */}
-                    <div style={{width:40,height:40,borderRadius:R.md,background:`${T.danger}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <span style={{fontSize:11,fontWeight:700,color:T.danger,fontFamily:F}}>{e.category.slice(0,2).toUpperCase()}</span>
+                    <div style={{width:40,height:40,borderRadius:R.md,
+                      background: e._source==="entry"?`${T.primary}10`:e._source==="staff"?`${T.warning}10`:`${T.danger}10`,
+                      display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={{fontSize:11,fontWeight:700,
+                        color: e._source==="entry"?T.primary:e._source==="staff"?T.warning:T.danger,
+                        fontFamily:F}}>{e.category.slice(0,2).toUpperCase()}</span>
                     </div>
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:600,color:T.text}}>{e.category}</div>
-                      <div style={{fontSize:11,color:T.muted,marginTop:2,display:"flex",gap:8}}>
+                      <div style={{fontSize:11,color:T.muted,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
                         <span>{fmtD(e.date)}</span>
                         {e.note&&<span style={{fontStyle:"italic"}}>· {e.note}</span>}
+                        {e._label&&<span style={{background:e._source==="entry"?`${T.primary}12`:e._source==="staff"?`${T.warning}15`:T.bg2,color:e._source==="entry"?T.primary:e._source==="staff"?T.warning:T.muted,padding:"1px 6px",borderRadius:R.pill,fontSize:10,fontWeight:500}}>{e._label}</span>}
                       </div>
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontSize:14,fontWeight:700,color:T.danger}}>−{fmt(e.amount)}</div>
-                      <div style={{fontSize:10,color:T.muted,marginTop:1}}>tap to edit</div>
+                      <div style={{fontSize:10,color:T.muted,marginTop:1}}>{canEdit?"tap to edit":"view only"}</div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </Card>
             </div>
           ))
@@ -4026,7 +4057,7 @@ export default function GasLedgerApp() {
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
-        {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
+        {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} entries={entries} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
         {screen==="history"     && <HistoryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen(prevScreen||"dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
