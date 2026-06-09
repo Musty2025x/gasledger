@@ -12,6 +12,8 @@ import {
   addEntry              as fbAddEntry,
   addDelivery           as fbAddDelivery,
   addPrice              as fbAddPrice,
+  deletePrice           as fbDeletePrice,
+  updatePrice           as fbUpdatePrice,
   addRemittance         as fbAddRemittance,
   addStandaloneExpense  as fbAddStandaloneExpense,
   updateStandaloneExpense as fbUpdateStandaloneExpense,
@@ -1159,13 +1161,35 @@ const DailyEntry = ({back, onSave, lastEntry, allEntries=[], allPrices=[], allDe
 // ═══════════════════════════════════════════════════════════════
 // STOCK & REFILL
 // ═══════════════════════════════════════════════════════════════
-const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery, onDeleteDelivery, back}) => {
+// Modal — bottom sheet for forms (must be top-level to prevent remount on state change)
+const Modal = ({title, onClose, children}) => (
+  <div style={{position:"absolute",inset:0,background:T.overlay,display:"flex",alignItems:"flex-end",zIndex:100}}>
+    <div style={{background:T.surface,borderRadius:"16px 16px 0 0",padding:"20px 16px 32px",width:"100%",maxHeight:"85%",overflowY:"auto",fontFamily:F}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <span style={{fontSize:16,fontWeight:600,color:T.text}}>{title}</span>
+        <button onClick={onClose} style={{background:T.bg2,border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <Icon n="close" s={14} c={T.muted}/>
+        </button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery, onDeleteDelivery, onDeletePrice, onUpdatePrice, back}) => {
   // Auto-switch to prices tab if navigated from onboarding "Set price" CTA
   const initTab = window.__stockTab || "deliveries";
   const [tab, setTab] = useState(initTab);
   useEffect(() => { delete window.__stockTab; }, []);
   const [showDel,   setShowDel]   = useState(false);
   const [showPx,    setShowPx]    = useState(false);
+  // Price edit state
+  const [pxEditOpen, setPxEditOpen] = useState(false);
+  const [pxEditId,   setPxEditId]   = useState(null);
+  const [pxEditVal,  setPxEditVal]  = useState("");
+  const [pxEditDate, setPxEditDate] = useState("");
+  const [pxEditNote, setPxEditNote] = useState("");
+  const [pxEditLd,   setPxEditLd]   = useState(false);
   const [editDel,   setEditDel]   = useState(null); // delivery being edited
   const [ld,        setLd]        = useState(false);
   const [delKg,     setDelKg]     = useState("");
@@ -1233,20 +1257,6 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
     setEditPx(String(del.pricePerKg||""));
     setEditNote(del.note||"");
   };
-
-  const Modal = ({title, onClose, children}) => (
-    <div style={{position:"absolute",inset:0,background:T.overlay,display:"flex",alignItems:"flex-end",zIndex:100}}>
-      <div style={{background:T.surface,borderRadius:"16px 16px 0 0",padding:"20px 16px 32px",width:"100%",maxHeight:"85%",overflowY:"auto",fontFamily:F}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <span style={{fontSize:16,fontWeight:600,color:T.text}}>{title}</span>
-          <button onClick={onClose} style={{background:T.bg2,border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <Icon n="close" s={14} c={T.muted}/>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
@@ -1433,6 +1443,13 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
                       <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                         {i===0&&<Badge label="Current" variant="success"/>}
                         {delta!==null&&<span style={{fontSize:11,fontWeight:600,color:delta>0?T.danger:T.success}}>{delta>0?"▲":"▼"} ₦{Math.abs(delta)}/kg</span>}
+                        {/* Edit/Delete buttons */}
+                        <div style={{display:"flex",gap:6,marginTop:4}}>
+                          <button onClick={()=>{ setPxEditId(p.id); setPxEditVal(String(p.pricePerKg)); setPxEditDate(p.date); setPxEditNote(p.note||""); setPxEditOpen(true); }}
+                            style={{fontSize:11,padding:"3px 8px",background:T.bg2,border:`1px solid ${T.border}`,borderRadius:R.sm,cursor:"pointer",color:T.muted,fontFamily:F}}>Edit</button>
+                          <button onClick={async()=>{ if(!window.confirm("Delete this price?"))return; try{await onDeletePrice(p.id);}catch(e){alert(e.message);} }}
+                            style={{fontSize:11,padding:"3px 8px",background:"#fee2e2",border:`1px solid #fca5a5`,borderRadius:R.sm,cursor:"pointer",color:T.danger,fontFamily:F}}>Delete</button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1452,6 +1469,23 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
           <Input label="Purchase price per kg" value={delPx} onChange={setDelPx} type="number" prefix="₦" placeholder="e.g. 310" hint="Optional — for margin tracking"/>
           <Input label="Note" value={delNote} onChange={setDelNote} placeholder="e.g. Morning truck"/>
           <Btn label="Save delivery" onClick={saveDel} loading={ld} disabled={!delKg||!delSup} size="lg" icon="check"/>
+        </Modal>
+      )}
+
+      {pxEditOpen&&(
+        <Modal title="Edit price" onClose={()=>setPxEditOpen(false)}>
+          <Input label="Selling price per kg" value={pxEditVal} onChange={setPxEditVal} type="number" prefix="₦" placeholder="e.g. 2000"/>
+          <Input label="Effective date" value={pxEditDate} onChange={setPxEditDate} type="date"/>
+          <Input label="Note (optional)" value={pxEditNote} onChange={setPxEditNote} placeholder="e.g. Price increase"/>
+          <Btn label="Save changes" loading={pxEditLd} onClick={async()=>{
+            if(!pxEditVal||Number(pxEditVal)<=0){alert("Enter a valid price.");return;}
+            setPxEditLd(true);
+            try{
+              await onUpdatePrice(pxEditId,{pricePerKg:Number(pxEditVal),date:pxEditDate,note:pxEditNote.trim()});
+              setPxEditOpen(false);
+            }catch(e){alert(e.message||"Failed");}
+            finally{setPxEditLd(false);}
+          }} size="lg" icon="check"/>
         </Modal>
       )}
 
@@ -3848,8 +3882,10 @@ export default function GasLedgerApp() {
   const addEntry      = useCallback(e   => fbAddEntry(plantId,e),         [plantId]);
   const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
   const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
+  const deletePrice   = useCallback(id  => fbDeletePrice(plantId,id),      [plantId]);
+  const updatePriceItem = useCallback((id,d) => fbUpdatePrice(plantId,id,d),[plantId]);
   const addRemittance      = useCallback(r   => fbAddRemittance(plantId,r),             [plantId]);
-  const addExpense         = useCallback(e   => fbAddStandaloneExpense(plantId,e),      [plantId]);
+  const addExpense         = useCallback(e   => fbAddStandaloneExpense(plantId,e,user?.uid),  [plantId,user?.uid]);
   const addShiftExpense    = useCallback(e   => fbAddShiftExpense(plantId,e),          [plantId]);
   const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId,id,d),[plantId]);
   const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId,id),  [plantId]);
@@ -3987,7 +4023,7 @@ export default function GasLedgerApp() {
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
-        {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
+        {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}

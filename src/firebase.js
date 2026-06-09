@@ -27,12 +27,12 @@ import { getFirestore, collection, doc,
 // Replace with values from Firebase Console →
 // Project Settings → General → Your apps → Web app → SDK setup
 const firebaseConfig = {
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: "AIzaSyCfZnadEkscDgswX6O1S_6I9dGYa1D_Wi4",
+  authDomain: "gasledger-prod.firebaseapp.com",
+  projectId: "gasledger-prod",
+  storageBucket: "gasledger-prod.firebasestorage.app",
+  messagingSenderId: "822780170310",
+  appId: "1:822780170310:web:d820d651d8609c16f1ba47"
 };
 
 const app  = initializeApp(firebaseConfig);
@@ -194,6 +194,10 @@ export const addPrice = async (plantId, price) => {
     createdAt: serverTimestamp(),
   });
 };
+export const deletePrice = async (plantId, priceId) =>
+  deleteDoc(doc(db, "plants", plantId, "prices", priceId));
+export const updatePrice = async (plantId, priceId, data) =>
+  updateDoc(doc(db, "plants", plantId, "prices", priceId), data);
 
 // --- Plant ---
 export const createPlant = async (uid, name, phone) => {
@@ -432,9 +436,14 @@ export const useRemittances = (plantId) => {
 export const standaloneExpensesCol = (plantId) =>
   collection(db, "plants", plantId, "standaloneExpenses");
 
-export const addStandaloneExpense = async (plantId, exp) => {
+export const addStandaloneExpense = async (plantId, exp, uid="") => {
   const { id: _ignore, ...data } = exp;
-  return addDoc(standaloneExpensesCol(plantId), { ...data, createdAt: serverTimestamp() });
+  return addDoc(standaloneExpensesCol(plantId), {
+    ...data,
+    source:      "owner",
+    submittedBy: uid,
+    createdAt:   serverTimestamp(),
+  });
 };
 export const updateStandaloneExpense = (plantId, id, data) =>
   updateDoc(doc(db, "plants", plantId, "standaloneExpenses", id), data);
