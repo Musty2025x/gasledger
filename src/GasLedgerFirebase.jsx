@@ -9,6 +9,7 @@ import {
   useEntries, useDeliveries, usePrices,
   useInvites, useStaffMembers, useRemittances,
   useStandaloneExpenses,
+  useStaffExpenses,
   addEntry              as fbAddEntry,
   addDelivery           as fbAddDelivery,
   addPrice              as fbAddPrice,
@@ -4199,7 +4200,9 @@ export default function GasLedgerApp() {
   const {data:deliveries,      loading:dLd} = useDeliveries(plantId);
   const {data:prices,          loading:pLd} = usePrices(plantId);
   const {data:remittances              }    = useRemittances(plantId);
-  const {data:standaloneExpenses       }    = useStandaloneExpenses(plantId);
+  const {data:ownerExpenses        }    = useStandaloneExpenses(isStaff ? null : plantId);
+  const {data:staffOwnExpenses     }    = useStaffExpenses(isStaff ? plantId : null, user?.uid);
+  const standaloneExpenses               = isStaff ? staffOwnExpenses : ownerExpenses;
   const {invites                       }    = useInvites(plantId, user?.uid);
   const {staff: staffMembers           }    = useStaffMembers(plantId);
 

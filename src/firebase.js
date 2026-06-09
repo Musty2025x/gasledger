@@ -459,9 +459,30 @@ export const useStandaloneExpenses = (plantId) => {
     const unsub = onSnapshot(q, (snap) => {
       setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-    });
+    }, () => setLoading(false));
     return unsub;
   }, [plantId]);
+  return { data, loading };
+};
+
+// Staff-specific expenses hook — queries only by submittedBy to match Firestore rules
+// Staff cannot do a full collection scan, only their own expenses
+export const useStaffExpenses = (plantId, uid) => {
+  const [data, setData]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!plantId || !uid) return;
+    const q = query(
+      standaloneExpensesCol(plantId),
+      where("submittedBy", "==", uid),
+      orderBy("date", "desc")
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, () => setLoading(false));
+    return unsub;
+  }, [plantId, uid]);
   return { data, loading };
 };
 
