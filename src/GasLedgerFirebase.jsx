@@ -802,13 +802,28 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
 // ═══════════════════════════════════════════════════════════════
 // DAILY ENTRY
 // ═══════════════════════════════════════════════════════════════
-const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDates=[], role="owner"}) => {
+const DailyEntry = ({back, onSave, lastEntry, allEntries=[], pricePerKg, costPerKg, existingDates=[], role="owner"}) => {
   const GP  = pricePerKg || DEFAULT_SELL_PRICE;
   const CP  = costPerKg  || DEFAULT_COST_PRICE;
   const now = new Date().toISOString().split("T")[0];
+
+  // Find the closest entry before a given date for opening meter auto-fill
+  const getPrevEntry = (selectedDate) => {
+    if (!allEntries.length) return lastEntry;
+    return [...allEntries].sort((a,b)=>b.date.localeCompare(a.date)).find(e=>e.date < selectedDate) || null;
+  };
+
   const [date,  setDate]  = useState(now);
   const [open,  setOpen]  = useState(String(lastEntry?.closeMeter||""));
   const [close, setClose] = useState("");
+
+  // When user changes the date, auto-update opening meter to prev entry closing meter
+  const handleDateChange = (newDate) => {
+    setDate(newDate);
+    const prev = getPrevEntry(newDate);
+    if (prev) setOpen(String(prev.closeMeter));
+    else setOpen("");
+  };
   const [cash,  setCash]  = useState("");
   const [pos,   setPos]   = useState("");
   const [exps,  setExps]  = useState([{cat:"",amt:""}]);
@@ -931,13 +946,19 @@ const DailyEntry = ({back, onSave, lastEntry, pricePerKg, costPerKg, existingDat
       {err&&<ErrBanner msg={err}/>}
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 24px"}}>
         <SLabel mt={0}>Date</SLabel>
-        <Input value={date} onChange={setDate} type="date"/>
+        <Input value={date} onChange={handleDateChange} type="date"/>
 
         <SLabel>Meter readings</SLabel>
         <Card pad="14px" style={{marginBottom:12}}>
-          <Input label="Opening meter (kg)" value={open} onChange={setOpen} type="number" placeholder="e.g. 14820" hint={lastEntry?`Last close: ${lastEntry.closeMeter} kg`:""}/>
-          <Input label="Closing meter (kg)" value={close} onChange={setClose} type="number" placeholder="e.g. 15340" error={close&&Number(close)<=Number(open)?"Must be greater than opening":""}/>
-          {gas>0&&<div style={{background:T.bg,borderRadius:R.sm,padding:"9px 12px",display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:T.muted}}>Gas dispensed</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fmtKg(gas)}</span></div>}
+          {(()=>{
+            const prevE = getPrevEntry(date);
+            return (<>
+              <Input label="Opening meter (kg)" value={open} onChange={setOpen} type="number" placeholder="e.g. 14820"
+                hint={prevE ? `Last close (${prevE.date}): ${prevE.closeMeter} kg` : "No previous entry found"}/>
+              <Input label="Closing meter (kg)" value={close} onChange={setClose} type="number" placeholder="e.g. 15340" error={close&&Number(close)<=Number(open)?"Must be greater than opening":""}/>
+              {gas>0&&<div style={{background:T.bg,borderRadius:R.sm,padding:"9px 12px",display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:T.muted}}>Gas dispensed</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fmtKg(gas)}</span></div>}
+            </>);
+          })()}
         </Card>
 
         <SLabel>Sales</SLabel>
@@ -3959,7 +3980,7 @@ export default function GasLedgerApp() {
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
-        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
+        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
