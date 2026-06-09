@@ -802,9 +802,7 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
 // ═══════════════════════════════════════════════════════════════
 // DAILY ENTRY
 // ═══════════════════════════════════════════════════════════════
-const DailyEntry = ({back, onSave, lastEntry, allEntries=[], pricePerKg, costPerKg, existingDates=[], role="owner"}) => {
-  const GP  = pricePerKg || DEFAULT_SELL_PRICE;
-  const CP  = costPerKg  || DEFAULT_COST_PRICE;
+const DailyEntry = ({back, onSave, lastEntry, allEntries=[], allPrices=[], allDeliveries=[], pricePerKg, costPerKg, existingDates=[], role="owner"}) => {
   const now = new Date().toISOString().split("T")[0];
 
   // Find the closest entry before a given date for opening meter auto-fill
@@ -813,11 +811,19 @@ const DailyEntry = ({back, onSave, lastEntry, allEntries=[], pricePerKg, costPer
     return [...allEntries].sort((a,b)=>b.date.localeCompare(a.date)).find(e=>e.date < selectedDate) || null;
   };
 
+  // Get the selling price and cost price active on a given date
+  const getPriceForDate = (d) => allPrices.length  ? priceOnDate(allPrices, d)    : (pricePerKg || DEFAULT_SELL_PRICE);
+  const getCostForDate  = (d) => allDeliveries.length ? costOnDate(allDeliveries, d) : (costPerKg  || DEFAULT_COST_PRICE);
+
   const [date,  setDate]  = useState(now);
   const [open,  setOpen]  = useState(String(lastEntry?.closeMeter||""));
   const [close, setClose] = useState("");
 
-  // When user changes the date, auto-update opening meter to prev entry closing meter
+  // Derived: price and cost for currently selected date
+  const GP = getPriceForDate(date);
+  const CP = getCostForDate(date);
+
+  // When user changes the date, auto-update opening meter and prices
   const handleDateChange = (newDate) => {
     setDate(newDate);
     const prev = getPrevEntry(newDate);
@@ -3980,7 +3986,7 @@ export default function GasLedgerApp() {
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
-        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
+        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
