@@ -69,6 +69,33 @@ const calcEntry = (e, sellingPrice = DEFAULT_SELL_PRICE, costPrice = DEFAULT_COS
   return { gas, sales, exp, expRev, cogs, grossProfit: grossP, profit: netP, variance };
 };
 
+// ── Date-aware price helpers ─────────────────────────────────
+// Returns the selling price that was active ON a given date
+// (the most recent price record on or before that date)
+const priceOnDate = (prices, date) => {
+  if (!prices || !prices.length) return DEFAULT_SELL_PRICE;
+  const d = new Date(date);
+  const active = [...prices]
+    .filter(p => new Date(p.date) <= d)
+    .sort((a,b) => new Date(b.date) - new Date(a.date));
+  return active.length ? active[0].pricePerKg : DEFAULT_SELL_PRICE;
+};
+
+// Returns the supplier cost price that was active ON a given date
+// (the most recent delivery purchase price on or before that date)
+const costOnDate = (deliveries, date) => {
+  if (!deliveries || !deliveries.length) return DEFAULT_COST_PRICE;
+  const d = new Date(date);
+  const active = [...deliveries]
+    .filter(del => del.pricePerKg > 0 && new Date(del.date) <= d)
+    .sort((a,b) => new Date(b.date) - new Date(a.date));
+  return active.length ? active[0].pricePerKg : DEFAULT_COST_PRICE;
+};
+
+// Convenience: calcEntry using historically correct prices for that date
+const calcEntryOnDate = (e, prices, deliveries) =>
+  calcEntry(e, priceOnDate(prices, e.date), costOnDate(deliveries, e.date));
+
 const buildStockPeriods = (entries, deliveries) => {
   if (!deliveries.length) return { periods:[], current:null };
   const sorted = [...deliveries].sort((a,b)=>new Date(a.date)-new Date(b.date));
@@ -1432,7 +1459,7 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 // ═══════════════════════════════════════════════════════════════
 // P&L REPORT
 // ═══════════════════════════════════════════════════════════════
-const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standaloneExpenses=[]}) => {
+const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPrice, initialMonth, standaloneExpenses=[]}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -1489,7 +1516,10 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standalon
   const days     = filtered.length;
 
   const totals = filtered.reduce((a,e)=>{
-    const c=calcEntry(e, SP, CP);
+    // Use the price/cost that was active on this entry's date
+    const sp = prices.length    ? priceOnDate(prices, e.date)     : SP;
+    const cp = deliveries.length? costOnDate(deliveries, e.date)  : CP;
+    const c  = calcEntry(e, sp, cp);
     return {
       rev:       a.rev       + c.sales,
       gas:       a.gas       + c.gas,
@@ -1660,7 +1690,9 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standalon
           startY: y, margin:{left:mg, right:mg},
           head: [["Date","Sales (NGN)","Gas","Gross Profit (NGN)"]],
           body: filtered.map(e => {
-            const c = calcEntry(e, SP, CP);
+            const sp = prices.length?priceOnDate(prices,e.date):SP;
+            const cp = deliveries.length?costOnDate(deliveries,e.date):CP;
+            const c  = calcEntry(e, sp, cp);
             // Use full numbers — no abbreviation
             return [
               fmtShort(e.date),
@@ -1887,7 +1919,9 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standalon
               ))}
             </div>
             {filtered.map((e,i)=>{
-              const c=calcEntry(e, SP, CP);
+              const _sp=prices.length?priceOnDate(prices,e.date):SP;
+              const _cp=deliveries.length?costOnDate(deliveries,e.date):CP;
+              const c=calcEntry(e,_sp,_cp);
               return (
                 <div key={e.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 76px",gap:0,padding:"10px 14px",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",alignItems:"center"}}>
                   <div>
@@ -1954,9 +1988,13 @@ const PnLScreen = ({entries, back, sellPrice, costPrice, initialMonth, standalon
 // ═══════════════════════════════════════════════════════════════
 // HISTORY
 // ═══════════════════════════════════════════════════════════════
-const HistoryScreen = ({entries, back, goDayDetail, sellPrice, costPrice, role="owner"}) => {
+const HistoryScreen = ({entries, prices=[], deliveries=[], back, goDayDetail, sellPrice, costPrice, role="owner"}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
+  // Use historically correct price for each entry
+  const calcE = (e) => prices.length && deliveries.length
+    ? calcEntryOnDate(e, prices, deliveries)
+    : calcE(e);
   return (
   <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
     <TopBar title="All entries" left={<BackBtn onClick={back}/>} right={<Badge label={`${entries.length} days`}/>}/>
@@ -1966,7 +2004,7 @@ const HistoryScreen = ({entries, back, goDayDetail, sellPrice, costPrice, role="
       ):(
         <Card>
           {entries.map((e,i)=>{
-            const c=calcEntry(e, SP, CP);
+            const c=calcE(e);
             return (
               <div key={e.id} onClick={()=>goDayDetail(e)}
                 style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<entries.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
@@ -3358,9 +3396,12 @@ const ExpensesScreen = ({ expenses, onAdd, onUpdate, onDelete, back }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice, standaloneExpenses=[] }) => {
+const MonthlySummaryScreen = ({ entries, prices=[], deliveries=[], back, goMonthPnL, sellPrice, costPrice, standaloneExpenses=[] }) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
+  const calcE = (e) => prices.length && deliveries.length
+    ? calcEntryOnDate(e, prices, deliveries)
+    : calcE(e);
 
   // Group entries by YYYY-MM
   const monthMap = {};
@@ -3381,7 +3422,7 @@ const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice,
   const months = Object.keys(monthMap).sort((a,b)=>b.localeCompare(a)).map(key => {
     const mes = monthMap[key];
     const entryTotals = mes.reduce((a,e)=>{
-      const c=calcEntry(e,SP,CP);
+      const c=calcE(e);
       return {rev:a.rev+c.sales, grossP:a.grossP+c.grossProfit, gas:a.gas+c.gas, profit:a.profit+c.profit};
     },{rev:0,grossP:0,gas:0,profit:0});
 
@@ -3392,9 +3433,9 @@ const MonthlySummaryScreen = ({ entries, back, goMonthPnL, sellPrice, costPrice,
       profit: entryTotals.profit - standaloneExp,
     };
 
-    const best   = mes.reduce((a,e)=>calcEntry(e,SP,CP).grossProfit>calcEntry(a,SP,CP).grossProfit?e:a);
+    const best   = mes.reduce((a,e)=>calcE(e).grossProfit>calcE(a).grossProfit?e:a);
     const sorted = [...mes].sort((a,b)=>a.date.localeCompare(b.date));
-    const spark  = sorted.map(e=>calcEntry(e,SP,CP).grossProfit);
+    const spark  = sorted.map(e=>calcE(e).grossProfit);
     const d      = new Date(key+"-01");
     const label  = d.toLocaleDateString("en-NG",{month:"long",year:"numeric"});
     const margin = totals.rev>0?Math.round((totals.grossP/totals.rev)*100):0;
@@ -3920,11 +3961,11 @@ export default function GasLedgerApp() {
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} back={()=>setScreen("dashboard")}/></Gate>}
-        {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
-        {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
+        {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
+        {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
         {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
-        {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
-        {screen==="history"     && <HistoryScreen entries={entries} back={()=>setScreen(prevScreen||"dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
+        {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
+        {screen==="history"     && <HistoryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen(prevScreen||"dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
         {screen==="remittance"  && <RemittanceScreen entries={entries} remittances={remittances} onSave={addRemittance} back={()=>setScreen("dashboard")} submittedBy={user?.uid}/>}
         {screen==="staffaccount"&& <StaffAccountScreen user={user} profile={profile} onSignOut={signOutUser} back={()=>setScreen("dashboard")}/> }
         {screen==="staffexpense"&& <StaffExpenseScreen onAdd={addShiftExpense} submittedBy={user?.uid} back={()=>setScreen("dashboard")} todayExpenses={standaloneExpenses.filter(e=>e.date===new Date().toISOString().split("T")[0]&&e.submittedBy===user?.uid)}/>}
