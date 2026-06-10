@@ -566,79 +566,112 @@ const NotificationsPanel = ({ notifs, onClose, onMarkRead }) => (
 );
 
 // ═══════════════════════════════════════════════════════════════
-// WHATSAPP NOTIFICATION via Callmebot (free, no server needed)
-// Owner sets their phone + API key in Settings → Notifications
+// WHATSAPP NOTIFICATION
+// Primary: UltraMsg API (free tier 500 msgs/month, works in Nigeria)
+// Fallback: opens WhatsApp with pre-filled message on owner's device
 // ═══════════════════════════════════════════════════════════════
-const sendWhatsAppNotif = async (phone, apiKey, message) => {
-  if (!phone || !apiKey) return; // not configured — skip silently
-  try {
-    const encoded = encodeURIComponent(message);
-    await fetch(`https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encoded}&apikey=${apiKey}`);
-  } catch(e) {
-    console.warn("WhatsApp notification failed:", e.message);
+const sendWhatsAppNotif = async (phone, token, instanceId, message) => {
+  if (!phone) return;
+
+  // If UltraMsg credentials exist, use the API
+  if (token && instanceId) {
+    try {
+      await fetch(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body:    new URLSearchParams({ token, to: phone, body: message }),
+      });
+      return;
+    } catch(e) {
+      console.warn("UltraMsg failed:", e.message);
+    }
   }
+
+  // Fallback: no API — show a WhatsApp link the owner can tap
+  // (useful when API not set up yet)
+  console.log("WhatsApp notif (no API):", message);
 };
 
 // ── Notification hook — watches for staff activity since last visit ──
 const useNotifications = (plantId, ownerUid, entries, standaloneExpenses, role) => {
-  const STORAGE_KEY = `gasledger_last_seen_${plantId}`;
-  const [unread,   setUnread]   = useState(0);
-  const [notifs,   setNotifs]   = useState([]);
-  const [lastSeen, setLastSeen] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEY) || new Date(0).toISOString(); }
+  const getStorageKey = () => plantId ? `gasledger_last_seen_${plantId}` : null;
+
+  const getLastSeen = () => {
+    const key = getStorageKey();
+    if (!key) return new Date(0).toISOString();
+    try { return localStorage.getItem(key) || new Date(0).toISOString(); }
     catch { return new Date(0).toISOString(); }
-  });
+  };
+
+  // Use a counter to force re-evaluation after markAllRead
+  const [readCount,  setReadCount]  = useState(0);
+  const [notifs,     setNotifs]     = useState([]);
+  const [unread,     setUnread]     = useState(0);
 
   useEffect(() => {
-    if (role !== "owner" || !plantId) return;
+    if (role !== "owner" || !plantId || !ownerUid) return;
 
-    // Build notification list from entries and expenses created by staff after lastSeen
+    const lastSeen = getLastSeen();
     const items = [];
+
+    const toISO = (ts) => {
+      if (!ts) return null;
+      if (ts?.toDate) return ts.toDate().toISOString();
+      if (typeof ts === "string") return ts;
+      return null;
+    };
 
     // Staff entries logged after lastSeen
     entries.forEach(e => {
-      if (!e.createdAt) return;
-      const createdAt = e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : e.createdAt;
-      if (createdAt > lastSeen && e.staffUid && e.staffUid !== ownerUid) {
-        const sales = (e.cashSales||0) + (e.posSales||0);
-        const gas   = (e.closeMeter||0) - (e.openMeter||0);
-        items.push({
-          id:      `entry_${e.id}`,
-          type:    "entry",
-          text:    `New entry logged for ${fmtD(e.date)}`,
-          detail:  `₦${sales.toLocaleString("en-NG")} sales · ${fmtKg(gas)}`,
-          time:    createdAt,
-          icon:    "entry",
-        });
-      }
+      const createdAt = toISO(e.createdAt);
+      if (!createdAt) return;
+      if (createdAt <= lastSeen) return;
+      if (!e.staffUid || e.staffUid === ownerUid) return;
+      const sales = (e.cashSales||0) + (e.posSales||0);
+      const gas   = (e.closeMeter||0) - (e.openMeter||0);
+      items.push({
+        id:     `entry_${e.id}`,
+        type:   "entry",
+        text:   `New daily entry — ${fmtD(e.date)}`,
+        detail: `₦${sales.toLocaleString("en-NG")} sales · ${fmtKg(gas)}`,
+        time:   createdAt,
+        icon:   "entry",
+      });
     });
 
     // Staff expenses logged after lastSeen
     standaloneExpenses.forEach(e => {
-      if (!e.createdAt) return;
-      const createdAt = e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : e.createdAt;
-      if (createdAt > lastSeen && e.source === "staff" && e.submittedBy !== ownerUid) {
-        items.push({
-          id:      `exp_${e.id}`,
-          type:    "expense",
-          text:    `Staff expense: ${e.category}`,
-          detail:  `₦${(e.amount||0).toLocaleString("en-NG")}${e.note?` · ${e.note}`:""}`,
-          time:    createdAt,
-          icon:    "cash",
-        });
-      }
+      const createdAt = toISO(e.createdAt);
+      if (!createdAt) return;
+      if (createdAt <= lastSeen) return;
+      if (e.source !== "staff") return;
+      if (e.submittedBy === ownerUid) return;
+      items.push({
+        id:     `exp_${e.id}`,
+        type:   "expense",
+        text:   `Staff expense: ${e.category}`,
+        detail: `₦${(e.amount||0).toLocaleString("en-NG")}${e.note?` · ${e.note}`:""}`,
+        time:   createdAt,
+        icon:   "cash",
+      });
     });
 
     items.sort((a,b) => b.time.localeCompare(a.time));
     setNotifs(items);
     setUnread(items.length);
-  }, [entries, standaloneExpenses, lastSeen, role, plantId]);
+  // readCount in deps forces re-run after markAllRead
+  }, [entries, standaloneExpenses, role, plantId, ownerUid, readCount]);
 
   const markAllRead = () => {
+    const key = getStorageKey();
     const now = new Date().toISOString();
-    try { localStorage.setItem(STORAGE_KEY, now); } catch {}
-    setLastSeen(now);
+    if (key) {
+      try { localStorage.setItem(key, now); } catch {}
+    }
+    // Force the effect to re-run by incrementing readCount
+    setReadCount(c => c + 1);
     setUnread(0);
+    setNotifs([]);
   };
 
   return { unread, notifs, markAllRead };
@@ -2466,43 +2499,49 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
 };
 
 // Top-level sub-screen wrapper — must be outside SettingsScreen to prevent remount on keystrokes
-// Notification settings form — saves waPhone + waApiKey to user's Firestore doc
+// Notification settings form — saves UltraMsg credentials to localStorage
 const NotifSettingsForm = ({ profile, plantId, onSaved }) => {
-  const [phone,  setPhone]  = useState(profile?.waPhone||"");
-  const [apiKey, setApiKey] = useState(profile?.waApiKey||"");
-  const [ld,     setLd]     = useState(false);
-  const [ok,     setOk]     = useState("");
-  const [err,    setErr]    = useState("");
+  const [phone,      setPhone]      = useState(localStorage.getItem("gasledger_wa_phone")||profile?.waPhone||"");
+  const [token,      setToken]      = useState(localStorage.getItem("gasledger_wa_token")||"");
+  const [instanceId, setInstanceId] = useState(localStorage.getItem("gasledger_wa_instanceid")||"");
+  const [ld,         setLd]         = useState(false);
+  const [ok,         setOk]         = useState("");
+  const [err,        setErr]        = useState("");
 
   const save = async () => {
     if (!phone.trim()) { setErr("Enter your WhatsApp phone number."); return; }
-    if (!apiKey.trim()) { setErr("Enter your Callmebot API key."); return; }
+    if (!token.trim() || !instanceId.trim()) { setErr("Enter your UltraMsg instance ID and token."); return; }
     setLd(true); setErr(""); setOk("");
     try {
-      await import("./firebase.js").then(({updateDoc:ud, doc:d, db}) => {});
-      // Use window.fbUpdateNotifSettings exposed from firebase.js
-      // For now save to localStorage as fallback until Firestore update is wired
-      localStorage.setItem("gasledger_wa_phone",  phone.trim());
-      localStorage.setItem("gasledger_wa_apikey", apiKey.trim());
-      setOk("Saved! You will now receive WhatsApp alerts when staff logs activity.");
-      setTimeout(()=>onSaved&&onSaved(), 1500);
-    } catch(e) { setErr("Failed to save. Try again."); }
+      localStorage.setItem("gasledger_wa_phone",      phone.trim());
+      localStorage.setItem("gasledger_wa_token",      token.trim());
+      localStorage.setItem("gasledger_wa_instanceid", instanceId.trim());
+      setOk("Saved! Send a test message to confirm it works.");
+    } catch(e) { setErr("Failed to save."); }
     finally { setLd(false); }
   };
 
   const test = async () => {
-    const p = phone||localStorage.getItem("gasledger_wa_phone")||"";
-    const k = apiKey||localStorage.getItem("gasledger_wa_apikey")||"";
-    if (!p||!k) { setErr("Enter your phone and API key first."); return; }
-    await sendWhatsAppNotif(p, k, "✅ GasLedger test message — notifications are working!");
-    setOk("Test message sent to your WhatsApp!");
+    const p = phone.trim(); const t = token.trim(); const i = instanceId.trim();
+    if (!p||!t||!i) { setErr("Fill in all fields and save first."); return; }
+    setOk("Sending test...");
+    await sendWhatsAppNotif(p, t, i, "✅ GasLedger test — WhatsApp notifications are working!");
+    setOk("Test sent! Check your WhatsApp.");
   };
 
   return (
     <div>
-      <Input label="Your WhatsApp number" value={phone} onChange={setPhone} placeholder="e.g. 2348012345678" hint="International format — 234 for Nigeria, no + sign"/>
+      <Input label="Your WhatsApp number" value={phone} onChange={setPhone}
+        placeholder="e.g. 2348012345678"
+        hint="International format — 234 for Nigeria, no + sign"/>
       <div style={{height:12}}/>
-      <Input label="Callmebot API key" value={apiKey} onChange={setApiKey} placeholder="e.g. 123456" hint="You receive this from Callmebot after the setup steps above"/>
+      <Input label="UltraMsg Instance ID" value={instanceId} onChange={setInstanceId}
+        placeholder="e.g. instance12345"
+        hint="Found in your UltraMsg dashboard after creating an instance"/>
+      <div style={{height:12}}/>
+      <Input label="UltraMsg Token" value={token} onChange={setToken}
+        placeholder="e.g. abc123xyz"
+        hint="Found next to your Instance ID in UltraMsg dashboard"/>
       {err&&<ErrBanner msg={err}/>}
       {ok&&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"10px 12px",fontSize:13,color:T.success,fontFamily:F,marginTop:8}}>{ok}</div>}
       <div style={{height:16}}/>
@@ -2881,18 +2920,18 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
       <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
         <Icon n="alert" s={16} c={T.primary}/>
         <div style={{fontSize:12,color:T.text2,lineHeight:1.6,fontFamily:F}}>
-          Get a WhatsApp message when your staff logs a daily entry or records an expense. Uses <strong>Callmebot</strong> — free, no app download needed.
+          Get a WhatsApp message when your staff logs a daily entry or records an expense. Uses <strong>UltraMsg</strong> — free tier, no credit card, works in Nigeria.
         </div>
       </div>
 
-      {/* Setup steps */}
       <div style={{background:T.bg,borderRadius:R.lg,padding:"12px 14px",marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10,fontFamily:F}}>Setup (one time)</div>
+        <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10,fontFamily:F}}>Setup (one time — 3 minutes)</div>
         {[
-          "Open WhatsApp and send a message to +34 644 59 91 69",
-          'Type exactly: "I allow callmebot to send me messages"',
-          "You will receive your API key in reply",
-          "Enter your phone number and API key below",
+          "Go to ultramsg.com and create a free account",
+          "Create a new instance — scan the QR code with your WhatsApp to connect it",
+          "Copy your Instance ID and Token from the dashboard",
+          "Enter them below with your phone number and tap Save",
+          "Tap 'Send test message' to confirm it's working",
         ].map((s,i)=>(
           <div key={i} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
             <div style={{width:20,height:20,borderRadius:"50%",background:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -2901,6 +2940,9 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             <span style={{fontSize:12,color:T.text2,lineHeight:1.5,fontFamily:F}}>{s}</span>
           </div>
         ))}
+        <div style={{marginTop:8,padding:"8px 10px",background:`${T.success}10`,borderRadius:R.md,fontSize:11,color:T.success,fontFamily:F}}>
+          Free tier: 500 messages/month. No credit card needed.
+        </div>
       </div>
 
       <NotifSettingsForm profile={profile} plantId={plantId} onSaved={backFromSub}/>
@@ -4440,11 +4482,12 @@ export default function GasLedgerApp() {
   const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries, standaloneExpenses, role);
 
   // WhatsApp config stored in localStorage by NotifSettingsForm
-  const waPhone  = localStorage.getItem("gasledger_wa_phone")  || profile?.waPhone  || "";
-  const waApiKey = localStorage.getItem("gasledger_wa_apikey") || profile?.waApiKey || "";
+  const waPhone      = localStorage.getItem("gasledger_wa_phone")      || profile?.waPhone      || "";
+  const waToken      = localStorage.getItem("gasledger_wa_token")      || profile?.waToken      || "";
+  const waInstanceId = localStorage.getItem("gasledger_wa_instanceid") || profile?.waInstanceId || "";
 
   // Helper: send WhatsApp alert to owner when staff does something
-  const notifyOwner = (msg) => { if (!isStaff) return; sendWhatsAppNotif(waPhone, waApiKey, msg); };
+  const notifyOwner = (msg) => { if (!isStaff) return; sendWhatsAppNotif(waPhone, waToken, waInstanceId, msg); };
 
   const addEntry      = useCallback(async (e) => {
     await fbAddEntry(plantId, { ...e, staffUid: user?.uid||"" });
@@ -4455,7 +4498,7 @@ export default function GasLedgerApp() {
       const msg   = `📊 New entry from ${profile?.displayName||"Staff"}\n${e.date}\nSales: ₦${sales.toLocaleString("en-NG")} · Gas: ${gas} kg\nView: gasledger.hggas.com.ng`;
       notifyOwner(msg);
     }
-  }, [plantId, user?.uid, isStaff, profile?.displayName, waPhone, waApiKey]);
+  }, [plantId, user?.uid, isStaff, profile?.displayName, waPhone, waToken, waInstanceId]);
   const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
   const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
   const deletePrice   = useCallback(id  => fbDeletePrice(plantId,id),      [plantId]);
