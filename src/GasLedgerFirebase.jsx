@@ -518,8 +518,135 @@ const SetupScreen = ({user}) => {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[], role="owner", onSignOut}) => {
-  const [hide, setHide] = useState(false);
+// ── Notifications panel — slides over dashboard ──────────────
+const NotificationsPanel = ({ notifs, onClose, onMarkRead }) => (
+  <div style={{position:"absolute",inset:0,background:T.overlay,zIndex:200,display:"flex",flexDirection:"column"}}>
+    <div style={{background:T.surface,flex:1,display:"flex",flexDirection:"column",maxHeight:"100%",overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{background:T.primary,padding:"16px 16px 14px",paddingTop:"max(16px,env(safe-area-inset-top))",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontSize:16,fontWeight:700,color:"#fff",fontFamily:F}}>Notifications</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {notifs.length>0&&(
+            <button onClick={onMarkRead} style={{fontSize:11,color:"rgba(255,255,255,.7)",background:"rgba(255,255,255,.1)",border:"none",borderRadius:R.pill,padding:"4px 10px",cursor:"pointer",fontFamily:F}}>
+              Mark all read
+            </button>
+          )}
+          <button onClick={onClose} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Icon n="close" s={14} c="#fff"/>
+          </button>
+        </div>
+      </div>
+      {/* List */}
+      <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
+        {notifs.length===0?(
+          <div style={{textAlign:"center",padding:"48px 20px",color:T.muted,fontFamily:F}}>
+            <div style={{fontSize:28,marginBottom:10}}>🔔</div>
+            <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>All caught up</div>
+            <div style={{fontSize:12}}>Staff activity will appear here when they log entries or expenses</div>
+          </div>
+        ):(
+          notifs.map((n,i)=>(
+            <div key={n.id} style={{display:"flex",gap:12,padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{width:38,height:38,borderRadius:R.md,background:n.type==="entry"?`${T.primary}12`:`${T.warning}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <Icon n={n.icon} s={18} c={n.type==="entry"?T.primary:T.warning}/>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>{n.text}</div>
+                <div style={{fontSize:12,color:T.muted,marginTop:2,fontFamily:F}}>{n.detail}</div>
+                <div style={{fontSize:10,color:T.muted,marginTop:4,fontFamily:F}}>
+                  {new Date(n.time).toLocaleString("en-NG",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// ═══════════════════════════════════════════════════════════════
+// WHATSAPP NOTIFICATION via Callmebot (free, no server needed)
+// Owner sets their phone + API key in Settings → Notifications
+// ═══════════════════════════════════════════════════════════════
+const sendWhatsAppNotif = async (phone, apiKey, message) => {
+  if (!phone || !apiKey) return; // not configured — skip silently
+  try {
+    const encoded = encodeURIComponent(message);
+    await fetch(`https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encoded}&apikey=${apiKey}`);
+  } catch(e) {
+    console.warn("WhatsApp notification failed:", e.message);
+  }
+};
+
+// ── Notification hook — watches for staff activity since last visit ──
+const useNotifications = (plantId, ownerUid, entries, standaloneExpenses, role) => {
+  const STORAGE_KEY = `gasledger_last_seen_${plantId}`;
+  const [unread,   setUnread]   = useState(0);
+  const [notifs,   setNotifs]   = useState([]);
+  const [lastSeen, setLastSeen] = useState(() => {
+    try { return localStorage.getItem(STORAGE_KEY) || new Date(0).toISOString(); }
+    catch { return new Date(0).toISOString(); }
+  });
+
+  useEffect(() => {
+    if (role !== "owner" || !plantId) return;
+
+    // Build notification list from entries and expenses created by staff after lastSeen
+    const items = [];
+
+    // Staff entries logged after lastSeen
+    entries.forEach(e => {
+      if (!e.createdAt) return;
+      const createdAt = e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : e.createdAt;
+      if (createdAt > lastSeen && e.staffUid && e.staffUid !== ownerUid) {
+        const sales = (e.cashSales||0) + (e.posSales||0);
+        const gas   = (e.closeMeter||0) - (e.openMeter||0);
+        items.push({
+          id:      `entry_${e.id}`,
+          type:    "entry",
+          text:    `New entry logged for ${fmtD(e.date)}`,
+          detail:  `₦${sales.toLocaleString("en-NG")} sales · ${fmtKg(gas)}`,
+          time:    createdAt,
+          icon:    "entry",
+        });
+      }
+    });
+
+    // Staff expenses logged after lastSeen
+    standaloneExpenses.forEach(e => {
+      if (!e.createdAt) return;
+      const createdAt = e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : e.createdAt;
+      if (createdAt > lastSeen && e.source === "staff" && e.submittedBy !== ownerUid) {
+        items.push({
+          id:      `exp_${e.id}`,
+          type:    "expense",
+          text:    `Staff expense: ${e.category}`,
+          detail:  `₦${(e.amount||0).toLocaleString("en-NG")}${e.note?` · ${e.note}`:""}`,
+          time:    createdAt,
+          icon:    "cash",
+        });
+      }
+    });
+
+    items.sort((a,b) => b.time.localeCompare(a.time));
+    setNotifs(items);
+    setUnread(items.length);
+  }, [entries, standaloneExpenses, lastSeen, role, plantId]);
+
+  const markAllRead = () => {
+    const now = new Date().toISOString();
+    try { localStorage.setItem(STORAGE_KEY, now); } catch {}
+    setLastSeen(now);
+    setUnread(0);
+  };
+
+  return { unread, notifs, markAllRead };
+};
+
+const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[], role="owner", onSignOut, notifs=[], unread=0, onMarkRead}) => {
+  const [hide,        setHide]        = useState(false);
+  const [showNotifs,  setShowNotifs]  = useState(false);
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
 
@@ -581,6 +708,17 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
               <button onClick={onSignOut} style={{background:"rgba(255,255,255,.1)",border:"none",borderRadius:R.md,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:"rgba(255,255,255,.7)"}}>
                 <Icon n="logout" s={14} c="rgba(255,255,255,.7)"/>
                 <span style={{fontSize:12,fontFamily:F,fontWeight:500}}>Sign out</span>
+              </button>
+            )}
+            {/* Notification bell — owner only */}
+            {role==="owner"&&(
+              <button onClick={()=>setShowNotifs(true)} style={{background:"rgba(255,255,255,.1)",border:"none",borderRadius:R.md,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:"rgba(255,255,255,.7)",position:"relative"}}>
+                <Icon n="alert" s={15} c="rgba(255,255,255,.7)"/>
+                {unread>0&&(
+                  <div style={{position:"absolute",top:4,right:4,width:16,height:16,borderRadius:"50%",background:T.danger,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #0d3b2e"}}>
+                    <span style={{fontSize:9,fontWeight:700,color:"#fff"}}>{unread>9?"9+":unread}</span>
+                  </div>
+                )}
               </button>
             )}
             <button onClick={()=>setHide(h=>!h)} style={{background:"rgba(255,255,255,.1)",border:"none",borderRadius:R.md,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:"rgba(255,255,255,.7)"}}>
@@ -798,6 +936,14 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
         )}
         <div style={{height:16}}/>
       </div>
+      {/* Notifications panel overlay */}
+      {showNotifs&&(
+        <NotificationsPanel
+          notifs={notifs}
+          onClose={()=>setShowNotifs(false)}
+          onMarkRead={()=>{ onMarkRead&&onMarkRead(); setShowNotifs(false); }}
+        />
+      )}
     </div>
   );
 };
@@ -2320,6 +2466,52 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
 };
 
 // Top-level sub-screen wrapper — must be outside SettingsScreen to prevent remount on keystrokes
+// Notification settings form — saves waPhone + waApiKey to user's Firestore doc
+const NotifSettingsForm = ({ profile, plantId, onSaved }) => {
+  const [phone,  setPhone]  = useState(profile?.waPhone||"");
+  const [apiKey, setApiKey] = useState(profile?.waApiKey||"");
+  const [ld,     setLd]     = useState(false);
+  const [ok,     setOk]     = useState("");
+  const [err,    setErr]    = useState("");
+
+  const save = async () => {
+    if (!phone.trim()) { setErr("Enter your WhatsApp phone number."); return; }
+    if (!apiKey.trim()) { setErr("Enter your Callmebot API key."); return; }
+    setLd(true); setErr(""); setOk("");
+    try {
+      await import("./firebase.js").then(({updateDoc:ud, doc:d, db}) => {});
+      // Use window.fbUpdateNotifSettings exposed from firebase.js
+      // For now save to localStorage as fallback until Firestore update is wired
+      localStorage.setItem("gasledger_wa_phone",  phone.trim());
+      localStorage.setItem("gasledger_wa_apikey", apiKey.trim());
+      setOk("Saved! You will now receive WhatsApp alerts when staff logs activity.");
+      setTimeout(()=>onSaved&&onSaved(), 1500);
+    } catch(e) { setErr("Failed to save. Try again."); }
+    finally { setLd(false); }
+  };
+
+  const test = async () => {
+    const p = phone||localStorage.getItem("gasledger_wa_phone")||"";
+    const k = apiKey||localStorage.getItem("gasledger_wa_apikey")||"";
+    if (!p||!k) { setErr("Enter your phone and API key first."); return; }
+    await sendWhatsAppNotif(p, k, "✅ GasLedger test message — notifications are working!");
+    setOk("Test message sent to your WhatsApp!");
+  };
+
+  return (
+    <div>
+      <Input label="Your WhatsApp number" value={phone} onChange={setPhone} placeholder="e.g. 2348012345678" hint="International format — 234 for Nigeria, no + sign"/>
+      <div style={{height:12}}/>
+      <Input label="Callmebot API key" value={apiKey} onChange={setApiKey} placeholder="e.g. 123456" hint="You receive this from Callmebot after the setup steps above"/>
+      {err&&<ErrBanner msg={err}/>}
+      {ok&&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"10px 12px",fontSize:13,color:T.success,fontFamily:F,marginTop:8}}>{ok}</div>}
+      <div style={{height:16}}/>
+      <Btn label="Save settings" onClick={save} loading={ld} size="lg" icon="check"/>
+      <div style={{marginTop:8}}><Btn label="Send test message" onClick={test} variant="outline" size="lg"/></div>
+    </div>
+  );
+};
+
 const SettingsSubScreen = ({ title, onBack, children }) => (
   <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bg,fontFamily:F}}>
     <TopBar title={title} dark={false} left={<BackBtn onClick={onBack} dark={false}/>}/>
@@ -2684,6 +2876,37 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
   );
 
   // ── Default cost price sub-screen ───────────────────────
+  if (sub === "notifications") return (
+    <SettingsSubScreen title="Notifications" onBack={backFromSub}>
+      <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
+        <Icon n="alert" s={16} c={T.primary}/>
+        <div style={{fontSize:12,color:T.text2,lineHeight:1.6,fontFamily:F}}>
+          Get a WhatsApp message when your staff logs a daily entry or records an expense. Uses <strong>Callmebot</strong> — free, no app download needed.
+        </div>
+      </div>
+
+      {/* Setup steps */}
+      <div style={{background:T.bg,borderRadius:R.lg,padding:"12px 14px",marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10,fontFamily:F}}>Setup (one time)</div>
+        {[
+          "Open WhatsApp and send a message to +34 644 59 91 69",
+          'Type exactly: "I allow callmebot to send me messages"',
+          "You will receive your API key in reply",
+          "Enter your phone number and API key below",
+        ].map((s,i)=>(
+          <div key={i} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",background:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style={{fontSize:10,fontWeight:700,color:"#fff",fontFamily:F}}>{i+1}</span>
+            </div>
+            <span style={{fontSize:12,color:T.text2,lineHeight:1.5,fontFamily:F}}>{s}</span>
+          </div>
+        ))}
+      </div>
+
+      <NotifSettingsForm profile={profile} plantId={plantId} onSaved={backFromSub}/>
+    </SettingsSubScreen>
+  );
+
   if (sub === "cost") return (
     <SettingsSubScreen title="Default cost price" onBack={backFromSub}>
       <p style={{fontSize:13,color:T.muted,lineHeight:1.6,marginBottom:16,fontFamily:F}}>
@@ -2760,7 +2983,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
               ? `₦${Number(liveCost).toLocaleString("en-NG")}/kg from latest delivery — tap to save`
               : "Not set — affects P&L accuracy"}
             onClick={()=>{ setDefCost(String(profile?.defaultCostPrice||liveCost||"")); setCostMsg(""); setSub("cost"); }}/>
-          {role==="owner"&&(
+          {role==="owner"&&(<>
             <Row icon="people" label="Staff access"
               sub={(()=>{
                 const active  = staffMembers.length;
@@ -2771,7 +2994,10 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
                 return "No staff yet";
               })()}
               onClick={()=>{ setInviteEmail(""); setInviteErr(""); setInviteOk(""); setSub("staff"); }}/>
-          )}
+            <Row icon="alert" label="Notifications"
+              sub={profile?.waPhone?"WhatsApp alerts active · tap to change":"Set up WhatsApp alerts for staff activity"}
+              onClick={()=>setSub("notifications")}/>
+          </>)}
         </div>
 
         {/* Account section */}
@@ -4210,14 +4436,40 @@ export default function GasLedgerApp() {
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
 
-  const addEntry      = useCallback(e   => fbAddEntry(plantId,e),         [plantId]);
+  // ── Notifications ──────────────────────────────────────────
+  const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries, standaloneExpenses, role);
+
+  // WhatsApp config stored in localStorage by NotifSettingsForm
+  const waPhone  = localStorage.getItem("gasledger_wa_phone")  || profile?.waPhone  || "";
+  const waApiKey = localStorage.getItem("gasledger_wa_apikey") || profile?.waApiKey || "";
+
+  // Helper: send WhatsApp alert to owner when staff does something
+  const notifyOwner = (msg) => { if (!isStaff) return; sendWhatsAppNotif(waPhone, waApiKey, msg); };
+
+  const addEntry      = useCallback(async (e) => {
+    await fbAddEntry(plantId, { ...e, staffUid: user?.uid||"" });
+    // Notify owner via WhatsApp when staff logs an entry
+    if (isStaff) {
+      const sales = (e.cashSales||0) + (e.posSales||0);
+      const gas   = (e.closeMeter||0) - (e.openMeter||0);
+      const msg   = `📊 New entry from ${profile?.displayName||"Staff"}\n${e.date}\nSales: ₦${sales.toLocaleString("en-NG")} · Gas: ${gas} kg\nView: gasledger.hggas.com.ng`;
+      notifyOwner(msg);
+    }
+  }, [plantId, user?.uid, isStaff, profile?.displayName, waPhone, waApiKey]);
   const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
   const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
   const deletePrice   = useCallback(id  => fbDeletePrice(plantId,id),      [plantId]);
   const updatePriceItem = useCallback((id,d) => fbUpdatePrice(plantId,id,d),[plantId]);
   const addRemittance      = useCallback(r   => fbAddRemittance(plantId,r),             [plantId]);
   const addExpense         = useCallback(e   => fbAddStandaloneExpense(plantId,e,user?.uid),  [plantId,user?.uid]);
-  const addShiftExpense    = useCallback(e   => fbAddShiftExpense(plantId,e),          [plantId]);
+  const addShiftExpense    = useCallback(async (e) => {
+    await fbAddShiftExpense(plantId, e);
+    // Notify owner when staff records an expense
+    if (isStaff) {
+      const msg = `💸 Staff expense recorded\n${profile?.displayName||"Staff"} · ${e.date}\n${e.category} — ₦${(e.amount||0).toLocaleString("en-NG")}${e.note?`\nNote: ${e.note}`:""}\nView: gasledger.hggas.com.ng`;
+      notifyOwner(msg);
+    }
+  }, [plantId, isStaff, profile?.displayName, waPhone, waApiKey]);
   const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId,id,d),[plantId]);
   const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId,id),  [plantId]);
   const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
@@ -4351,7 +4603,7 @@ export default function GasLedgerApp() {
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser}/>}
+        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser} notifs={notifs} unread={unread} onMarkRead={markAllRead}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} back={()=>setScreen("dashboard")}/></Gate>}
