@@ -4514,7 +4514,7 @@ export default function GasLedgerApp() {
       const msg = `💸 Staff expense recorded\n${profile?.displayName||"Staff"} · ${e.date}\n${e.category} — ₦${(e.amount||0).toLocaleString("en-NG")}${e.note?`\nNote: ${e.note}`:""}\nView: gasledger.hggas.com.ng`;
       notifyOwner(msg);
     }
-  }, [plantId, isStaff, profile?.displayName, waPhone, waApiKey]);
+  }, [plantId, isStaff, profile?.displayName, waPhone, waToken, waInstanceId]);
   const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId,id,d),[plantId]);
   const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId,id),  [plantId]);
   const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
