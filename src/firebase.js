@@ -34,6 +34,7 @@ const firebaseConfig = {
   messagingSenderId: "822780170310",
   appId: "1:822780170310:web:d820d651d8609c16f1ba47"
 };
+
 const app  = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db   = getFirestore(app);
@@ -219,6 +220,23 @@ export const createPlant = async (uid, name, phone) => {
 
 export const updatePlantName = (plantId, name) =>
   updateDoc(plantDoc(plantId), { name });
+
+// Save WhatsApp notification credentials to plant doc so staff can read them
+export const updateNotifSettings = (plantId, { waPhone, waToken, waInstanceId }) =>
+  updateDoc(plantDoc(plantId), { waPhone, waToken, waInstanceId });
+
+// Live plant doc — gives access to waPhone/waToken/waInstanceId set by owner
+export const usePlant = (plantId) => {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!plantId) return;
+    const unsub = onSnapshot(plantDoc(plantId), snap => {
+      if (snap.exists()) setData({ id: snap.id, ...snap.data() });
+    });
+    return unsub;
+  }, [plantId]);
+  return data;
+};
 
 // ═══════════════════════════════════════════════════════════════
 // PHONE AUTH HELPERS

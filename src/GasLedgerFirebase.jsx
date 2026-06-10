@@ -10,6 +10,7 @@ import {
   useInvites, useStaffMembers, useRemittances,
   useStandaloneExpenses,
   useStaffExpenses,
+  usePlant,
   addEntry              as fbAddEntry,
   addDelivery           as fbAddDelivery,
   addPrice              as fbAddPrice,
@@ -30,8 +31,13 @@ import {
 } from "./firebase.js";
 
 // ── Billing stubs (Paystack not yet active) ──────────────────
-const getPlan      = (profile) => profile?.plan || "free";
-const fbUpdatePlan = async () => {};
+const getPlan             = (profile) => profile?.plan || "free";
+const fbUpdatePlan        = async () => {};
+const fbUpdateNotifSettings = async (plantId, creds) => {
+  // Dynamically import to avoid circular deps
+  const { updateNotifSettings } = await import("./firebase.js");
+  return updateNotifSettings(plantId, creds);
+};
 
 
 // ── Tokens ───────────────────────────────────────────────────
@@ -2518,8 +2524,14 @@ const NotifSettingsForm = ({ profile, plantId, onSaved }) => {
       safeSet("gasledger_wa_phone",      phone.trim());
       safeSet("gasledger_wa_token",      token.trim());
       safeSet("gasledger_wa_instanceid", instanceId.trim());
-      setOk("Saved! Send a test message to confirm it works.");
-    } catch(e) { setErr("Failed to save."); }
+      // Save to Firestore plant doc so staff devices can read credentials too
+      await fbUpdateNotifSettings(plantId, {
+        waPhone:      phone.trim(),
+        waToken:      token.trim(),
+        waInstanceId: instanceId.trim(),
+      });
+      setOk("Saved! Staff activity will now send WhatsApp alerts to your number.");
+    } catch(e) { setErr("Failed to save. Try again."); }
     finally { setLd(false); }
   };
 
@@ -4475,6 +4487,7 @@ export default function GasLedgerApp() {
   const standaloneExpenses               = isStaff ? staffOwnExpenses : ownerExpenses;
   const {invites                       }    = useInvites(plantId, user?.uid);
   const {staff: staffMembers           }    = useStaffMembers(plantId);
+  const plantDoc                            = usePlant(plantId); // for WhatsApp creds
 
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
@@ -4483,10 +4496,11 @@ export default function GasLedgerApp() {
   // ── Notifications ──────────────────────────────────────────
   const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries||[], standaloneExpenses||[], role);
 
-  // WhatsApp config — safe localStorage read
-  const waPhone      = (()=>{ try{ return localStorage.getItem("gasledger_wa_phone")||""; }catch{ return ""; } })();
-  const waToken      = (()=>{ try{ return localStorage.getItem("gasledger_wa_token")||""; }catch{ return ""; } })();
-  const waInstanceId = (()=>{ try{ return localStorage.getItem("gasledger_wa_instanceid")||""; }catch{ return ""; } })();
+  // WhatsApp credentials — read from Firestore plant doc (set by owner, readable by all plant members)
+  // This ensures staff devices can send notifications to the owner
+  const waPhone      = plantDoc?.waPhone      || (()=>{ try{ return localStorage.getItem("gasledger_wa_phone")||"";      }catch{ return ""; } })();
+  const waToken      = plantDoc?.waToken      || (()=>{ try{ return localStorage.getItem("gasledger_wa_token")||"";      }catch{ return ""; } })();
+  const waInstanceId = plantDoc?.waInstanceId || (()=>{ try{ return localStorage.getItem("gasledger_wa_instanceid")||"";}catch{ return ""; } })();
 
   // Helper: send WhatsApp alert to owner when staff does something
   const notifyOwner = (msg) => { if (!isStaff) return; sendWhatsAppNotif(waPhone, waToken, waInstanceId, msg); };
