@@ -2501,9 +2501,10 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
 // Top-level sub-screen wrapper — must be outside SettingsScreen to prevent remount on keystrokes
 // Notification settings form — saves UltraMsg credentials to localStorage
 const NotifSettingsForm = ({ profile, plantId, onSaved }) => {
-  const [phone,      setPhone]      = useState(localStorage.getItem("gasledger_wa_phone")||profile?.waPhone||"");
-  const [token,      setToken]      = useState(localStorage.getItem("gasledger_wa_token")||"");
-  const [instanceId, setInstanceId] = useState(localStorage.getItem("gasledger_wa_instanceid")||"");
+  const safeGet = (k) => { try{ return localStorage.getItem(k)||""; }catch{ return ""; } };
+  const [phone,      setPhone]      = useState(()=>safeGet("gasledger_wa_phone")||profile?.waPhone||"");
+  const [token,      setToken]      = useState(()=>safeGet("gasledger_wa_token"));
+  const [instanceId, setInstanceId] = useState(()=>safeGet("gasledger_wa_instanceid"));
   const [ld,         setLd]         = useState(false);
   const [ok,         setOk]         = useState("");
   const [err,        setErr]        = useState("");
@@ -2513,9 +2514,10 @@ const NotifSettingsForm = ({ profile, plantId, onSaved }) => {
     if (!token.trim() || !instanceId.trim()) { setErr("Enter your UltraMsg instance ID and token."); return; }
     setLd(true); setErr(""); setOk("");
     try {
-      localStorage.setItem("gasledger_wa_phone",      phone.trim());
-      localStorage.setItem("gasledger_wa_token",      token.trim());
-      localStorage.setItem("gasledger_wa_instanceid", instanceId.trim());
+      const safeSet = (k,v) => { try{ localStorage.setItem(k,v); }catch{} };
+      safeSet("gasledger_wa_phone",      phone.trim());
+      safeSet("gasledger_wa_token",      token.trim());
+      safeSet("gasledger_wa_instanceid", instanceId.trim());
       setOk("Saved! Send a test message to confirm it works.");
     } catch(e) { setErr("Failed to save."); }
     finally { setLd(false); }
@@ -4479,12 +4481,12 @@ export default function GasLedgerApp() {
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
 
   // ── Notifications ──────────────────────────────────────────
-  const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries, standaloneExpenses, role);
+  const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries||[], standaloneExpenses||[], role);
 
-  // WhatsApp config stored in localStorage by NotifSettingsForm
-  const waPhone      = localStorage.getItem("gasledger_wa_phone")      || profile?.waPhone      || "";
-  const waToken      = localStorage.getItem("gasledger_wa_token")      || profile?.waToken      || "";
-  const waInstanceId = localStorage.getItem("gasledger_wa_instanceid") || profile?.waInstanceId || "";
+  // WhatsApp config — safe localStorage read
+  const waPhone      = (()=>{ try{ return localStorage.getItem("gasledger_wa_phone")||""; }catch{ return ""; } })();
+  const waToken      = (()=>{ try{ return localStorage.getItem("gasledger_wa_token")||""; }catch{ return ""; } })();
+  const waInstanceId = (()=>{ try{ return localStorage.getItem("gasledger_wa_instanceid")||""; }catch{ return ""; } })();
 
   // Helper: send WhatsApp alert to owner when staff does something
   const notifyOwner = (msg) => { if (!isStaff) return; sendWhatsAppNotif(waPhone, waToken, waInstanceId, msg); };
