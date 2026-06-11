@@ -33,6 +33,11 @@ import {
 // ── Billing stubs (Paystack not yet active) ──────────────────
 const getPlan             = (profile) => profile?.plan || "free";
 const fbUpdatePlan        = async () => {};
+const getPlanLimits = (plan) => {
+  if (plan === "pro")   return { maxStaff:Infinity, maxEntries:Infinity, pdf:true,  whatsapp:true,  notifications:true  };
+  if (plan === "basic") return { maxStaff:2,        maxEntries:Infinity, pdf:true,  whatsapp:true,  notifications:true  };
+  return                       { maxStaff:0,        maxEntries:30,       pdf:false, whatsapp:false, notifications:false };
+};
 const fbUpdateNotifSettings = async (plantId, creds) => {
   // Dynamically import to avoid circular deps
   const { updateNotifSettings } = await import("./firebase.js");
@@ -1706,7 +1711,7 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 // ═══════════════════════════════════════════════════════════════
 // P&L REPORT
 // ═══════════════════════════════════════════════════════════════
-const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPrice, initialMonth, standaloneExpenses=[]}) => {
+const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPrice, initialMonth, standaloneExpenses=[], canExportPdf=true, onUpgrade}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -2044,15 +2049,28 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
         );
         return (
           <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:"8px 12px",display:"flex",gap:8,flexShrink:0}}>
-            <button onClick={exportPDF} disabled={pdfLoading||days===0}
-              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",background:pdfLoading||days===0?T.bg2:T.primary,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:pdfLoading||days===0?T.muted:"#fff",cursor:pdfLoading||days===0?"default":"pointer",fontFamily:F}}>
-              <Icon n="copy" s={15} c={pdfLoading||days===0?T.muted:"#fff"}/>
-              {pdfLoading?"Generating…":"Export PDF"}
+            <button onClick={canExportPdf ? exportPDF : onUpgrade}
+              disabled={canExportPdf && (pdfLoading||days===0)}
+              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",
+                background: !canExportPdf ? `${T.gold}20` : pdfLoading||days===0 ? T.bg2 : T.primary,
+                border: !canExportPdf ? `1.5px solid ${T.gold}` : "none",
+                borderRadius:R.md,fontSize:13,fontWeight:600,
+                color: !canExportPdf ? T.gold : pdfLoading||days===0 ? T.muted : "#fff",
+                cursor: !canExportPdf || (!pdfLoading&&days>0) ? "pointer" : "default",fontFamily:F}}>
+              <Icon n="copy" s={15} c={!canExportPdf ? T.gold : pdfLoading||days===0 ? T.muted : "#fff"}/>
+              {!canExportPdf ? "⭐ Upgrade for PDF" : pdfLoading ? "Generating…" : "Export PDF"}
             </button>
-            <a href={days>0?`https://wa.me/?text=${waText}`:"#"} target="_blank" rel="noopener noreferrer"
-              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",background:days>0?"#25d366":T.bg2,borderRadius:R.md,fontSize:13,fontWeight:600,color:days>0?"#fff":T.muted,textDecoration:"none",pointerEvents:days>0?"auto":"none"}}>
-              <Icon n="share" s={15} c={days>0?"#fff":T.muted}/>
-              Share via WA
+            <a href={canExportPdf && days>0 ? `https://wa.me/?text=${waText}` : "#"}
+              onClick={!canExportPdf ? (ev)=>{ ev.preventDefault(); onUpgrade&&onUpgrade(); } : undefined}
+              target="_blank" rel="noopener noreferrer"
+              style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",
+                background: !canExportPdf ? `${T.gold}12` : days>0 ? "#25d366" : T.bg2,
+                border: !canExportPdf ? `1.5px solid ${T.gold}` : "none",
+                borderRadius:R.md,fontSize:13,fontWeight:600,
+                color: !canExportPdf ? T.gold : days>0 ? "#fff" : T.muted,
+                textDecoration:"none",pointerEvents:"auto",cursor:"pointer"}}>
+              <Icon n="share" s={15} c={!canExportPdf ? T.gold : days>0 ? "#fff" : T.muted}/>
+              {!canExportPdf ? "⭐ Upgrade" : "Share via WA"}
             </a>
           </div>
         );
@@ -2575,7 +2593,7 @@ const SettingsSubScreen = ({ title, onBack, children }) => (
 // ═══════════════════════════════════════════════════════════════
 // SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════════════
-const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0 }) => {
+const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0, planLimits={} }) => {
   const role = profile?.role || "owner";
   // ── Load Paystack script on mount ────────────────────────
   useEffect(() => {
@@ -2786,6 +2804,14 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
 
   const sendInvite = async () => {
     if (!inviteEmail.trim()) return;
+    // Check plan limit
+    const activeStaff  = staffMembers.length;
+    const maxStaff     = planLimits.maxStaff ?? 0;
+    if (activeStaff >= maxStaff) {
+      const needed = maxStaff === 0 ? "Basic" : "Pro";
+      setInviteErr(`Your ${getPlan(profile)} plan allows ${maxStaff === 0 ? "no" : maxStaff} staff member${maxStaff === 1 ? "" : "s"}. Upgrade to ${needed} to add more.`);
+      return;
+    }
     setInviteLd(true); setInviteErr(""); setInviteOk("");
     try {
       await createInvite(plantId, profile?.displayName||"", user.uid, inviteEmail.trim());
@@ -3068,9 +3094,33 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
         {/* ── Plan & Billing section ─────────────────────── */}
         {(()=>{
           const PLANS = [
-            {id:"free",  name:"Free",  price:0,    tag:"Beta",       extras:["1 staff member","All core features"]},
-            {id:"basic", name:"Basic", price:2000, tag:"Popular",    extras:["Up to 3 staff","WhatsApp share","Priority support"]},
-            {id:"pro",   name:"Pro",   price:5000, tag:"Best value", extras:["Unlimited staff","Multi-plant","Credit tracking"]},
+            {
+              id:    "free",
+              name:  "Free",
+              price: 0,
+              tag:   "Starter",
+              color: T.muted,
+              extras: ["Owner only — no staff","Max 30 entries/month","Dashboard & stock tracker","No PDF export"],
+              limits: { maxStaff:0, maxEntries:30, pdf:false, whatsapp:false, notifications:false },
+            },
+            {
+              id:    "basic",
+              name:  "Basic",
+              price: 3500,
+              tag:   "Popular",
+              color: T.primary,
+              extras: ["Up to 2 staff members","Unlimited entries","PDF export & WhatsApp share","Expense tracker","Staff notifications"],
+              limits: { maxStaff:2, maxEntries:Infinity, pdf:true, whatsapp:true, notifications:true },
+            },
+            {
+              id:    "pro",
+              name:  "Pro",
+              price: 7500,
+              tag:   "Best value",
+              color: T.gold,
+              extras: ["Unlimited staff members","Everything in Basic","Monthly P&L summary","Multi-plant (coming soon)","Priority support"],
+              limits: { maxStaff:Infinity, maxEntries:Infinity, pdf:true, whatsapp:true, notifications:true },
+            },
           ];
 
           const currentPlan = getPlan(profile);
@@ -3165,7 +3215,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
                     onClick={()=>handleUpgrade(PLANS.find(p=>p.id===(currentPlan==="free"?"basic":"pro")))}
                     disabled={!!billingLd}
                     style={{width:"100%",padding:"12px",background:currentPlan==="free"?T.primary:T.gold,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:currentPlan==="free"?"#fff":"#000",cursor:billingLd?"default":"pointer",fontFamily:F,marginBottom:8}}>
-                    {billingLd?"Opening payment…":currentPlan==="free"?`Upgrade to Basic — ₦2,000/mo`:`Upgrade to Pro — ₦5,000/mo`}
+                    {billingLd?"Opening payment…":currentPlan==="free"?`Upgrade to Basic — ₦3,500/mo`:`Upgrade to Pro — ₦7,500/mo`}
                   </button>
                 )}
                 {currentPlan==="pro"&&(
@@ -4477,6 +4527,8 @@ export default function GasLedgerApp() {
   const role    = profile?.role || "owner";
   const plantId = profile?.plantId;
   const isStaff = role === "staff";
+  const plan    = getPlan(profile);
+  const planLimits = getPlanLimits(plan);
 
   const {data:entries,         loading:eLd} = useEntries(plantId);
   const {data:deliveries,      loading:dLd} = useDeliveries(plantId);
@@ -4672,8 +4724,8 @@ export default function GasLedgerApp() {
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} back={()=>setScreen("dashboard")}/></Gate>}
-        {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses}/></Gate>}
-        {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses}/></Gate>}
+        {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
+        {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
         {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} entries={entries} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="monthly"     && <Gate allowed={!isStaff}><MonthlySummaryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} goMonthPnL={(key)=>{ setMonthlyKey(key); setScreen("pnl-monthly"); }}/></Gate>}
         {screen==="history"     && <HistoryScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen(prevScreen||"dashboard")} goDayDetail={openDetail} sellPrice={livePrice} costPrice={liveCost}/>}
@@ -4681,7 +4733,7 @@ export default function GasLedgerApp() {
         {screen==="staffaccount"&& <StaffAccountScreen user={user} profile={profile} onSignOut={signOutUser} back={()=>setScreen("dashboard")}/> }
         {screen==="staffexpense"&& <StaffExpensesListScreen onAdd={addShiftExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} submittedBy={user?.uid} back={()=>setScreen("dashboard")} allExpenses={standaloneExpenses}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
-        {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost}/></Gate>}
+        {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost} planLimits={planLimits}/></Gate>}
       </div>
       {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen==="staffexpense"?"staffexpense":screen==="staffaccount"?"staffaccount":screen==="entry"||screen==="history"||(screen==="detail"&&role==="owner")?"entryhub":screen} onChange={setScreen} role={role}/>}
     </Shell>
