@@ -4507,14 +4507,16 @@ export default function GasLedgerApp() {
 
   const addEntry      = useCallback(async (e) => {
     await fbAddEntry(plantId, { ...e, staffUid: user?.uid||"" });
-    // Notify owner via WhatsApp when staff logs an entry
     if (isStaff) {
-      const sales = (e.cashSales||0) + (e.posSales||0);
-      const gas   = (e.closeMeter||0) - (e.openMeter||0);
-      const msg   = `📊 New entry from ${profile?.displayName||"Staff"}\n${e.date}\nSales: ₦${sales.toLocaleString("en-NG")} · Gas: ${gas} kg\nView: gasledger.hggas.com.ng`;
-      notifyOwner(msg);
+      const phone  = plantDoc?.waPhone      || "";
+      const tok    = plantDoc?.waToken      || "";
+      const instId = plantDoc?.waInstanceId || "";
+      const sales  = (e.cashSales||0) + (e.posSales||0);
+      const gas    = (e.closeMeter||0) - (e.openMeter||0);
+      const msg    = `📊 New entry from ${profile?.displayName||"Staff"}\n${e.date}\nSales: ₦${sales.toLocaleString("en-NG")} · Gas: ${gas} kg\nView: gasledger.hggas.com.ng`;
+      sendWhatsAppNotif(phone, tok, instId, msg);
     }
-  }, [plantId, user?.uid, isStaff, profile?.displayName, waPhone, waToken, waInstanceId]);
+  }, [plantId, user?.uid, isStaff, profile?.displayName, plantDoc]);
   const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
   const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
   const deletePrice   = useCallback(id  => fbDeletePrice(plantId,id),      [plantId]);
@@ -4525,10 +4527,14 @@ export default function GasLedgerApp() {
     await fbAddShiftExpense(plantId, e);
     // Notify owner when staff records an expense
     if (isStaff) {
+      // Read credentials fresh from plantDoc to avoid stale closure
+      const phone  = plantDoc?.waPhone      || "";
+      const tok    = plantDoc?.waToken      || "";
+      const instId = plantDoc?.waInstanceId || "";
       const msg = `💸 Staff expense recorded\n${profile?.displayName||"Staff"} · ${e.date}\n${e.category} — ₦${(e.amount||0).toLocaleString("en-NG")}${e.note?`\nNote: ${e.note}`:""}\nView: gasledger.hggas.com.ng`;
-      notifyOwner(msg);
+      sendWhatsAppNotif(phone, tok, instId, msg);
     }
-  }, [plantId, isStaff, profile?.displayName, waPhone, waToken, waInstanceId]);
+  }, [plantId, isStaff, profile?.displayName, plantDoc]);
   const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId,id,d),[plantId]);
   const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId,id),  [plantId]);
   const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
