@@ -1093,6 +1093,13 @@ const DailyEntry = ({back, onSave, lastEntry, allEntries=[], allPrices=[], allDe
     finally { setLd(false); }
   };
 
+  // Auto-navigate back 2.5s after success — Firestore snapshot arrives before dashboard renders
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => back(), 2500);
+    return () => clearTimeout(t);
+  }, [done]);
+
   if (done) {
     const savedGross = grossP;
     const savedSales = sales;
