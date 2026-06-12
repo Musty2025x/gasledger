@@ -4625,8 +4625,8 @@ export default function GasLedgerApp() {
       sendWhatsAppNotif(phone, tok, instId, msg);
     }
   }, [plantId, user?.uid, isStaff, profile?.displayName, plantDoc]);
-  const addDelivery   = useCallback(d   => fbAddDelivery(plantId,d),      [plantId]);
-  const addPrice      = useCallback(p   => fbAddPrice(plantId,p),         [plantId]);
+  const addDelivery   = useCallback(async d => { await fbAddDelivery(plantId,d); onSaveComplete(); }, [plantId]);
+  const addPrice      = useCallback(async p => { await fbAddPrice(plantId,p);    onSaveComplete(); }, [plantId]);
   const deletePrice   = useCallback(id  => fbDeletePrice(plantId,id),      [plantId]);
   const updatePriceItem = useCallback((id,d) => fbUpdatePrice(plantId,id,d),[plantId]);
   const addRemittance      = useCallback(r   => fbAddRemittance(plantId,r),             [plantId]);
