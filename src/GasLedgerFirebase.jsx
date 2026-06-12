@@ -1088,8 +1088,6 @@ const DailyEntry = ({back, onSave, lastEntry, allEntries=[], allPrices=[], allDe
     setLd(true); setErr("");
     try {
       await onSave({date,openMeter:Number(open),closeMeter:Number(close),cashSales:Number(cash)||0,posSales:Number(pos)||0,expenses:exps.filter(x=>x.cat&&x.amt).map(x=>({cat:x.cat,amt:Number(x.amt)})),notes});
-      // Wait for Firestore onSnapshot to update entries before showing success
-      await new Promise(r=>setTimeout(r,700));
       setDone(true);
     } catch(e) { setErr(e.message||"Save failed. Try again."); }
     finally { setLd(false); }
@@ -4626,7 +4624,6 @@ export default function GasLedgerApp() {
 
   const addEntry      = useCallback(async (e) => {
     await fbAddEntry(plantId, { ...e, staffUid: user?.uid||"" });
-    onSaveComplete(); // trigger 800ms spinner so Firestore snapshot arrives before dashboard
     if (isStaff) {
       const phone  = plantDoc?.waPhone      || "";
       const tok    = plantDoc?.waToken      || "";
@@ -4768,7 +4765,7 @@ export default function GasLedgerApp() {
 
   // ── Data loading ──────────────────────────────────────────
   if ((eLd||dLd||pLd) && screen==="dashboard") return <Shell><Spinner/></Shell>;
-  if (justSaved) return <Shell><Spinner/></Shell>;
+  if (justSaved && screen==="dashboard") return <Shell><Spinner/></Shell>;
 
   // ── Gate function — blocks staff from owner-only screens ──
   const Gate = ({children, allowed=true}) => allowed ? children : (
@@ -4791,7 +4788,7 @@ export default function GasLedgerApp() {
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser} notifs={notifs} unread={unread} onMarkRead={markAllRead}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
-        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
+        {screen==="entry"       && <DailyEntry back={()=>{ onSaveComplete(); setScreen("dashboard"); }} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} loading={dLd||pLd} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
