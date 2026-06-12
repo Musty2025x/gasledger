@@ -804,7 +804,21 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           const hasPrice=SP>DEFAULT_SELL_PRICE||(sellPrice&&sellPrice>0);
           const hasEntry=entries.length>0;
           const allDone=hasDelivery&&hasPrice&&hasEntry;
-          if(allDone)return null;
+          if(allDone) return (
+            <div style={{marginBottom:16}}>
+              <Card pad="14px">
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:`${T.success}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Icon n="check" s={18} c={T.success}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Setup complete 🎉</div>
+                    <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2}}>Your plant is ready. Dashboard updates as you log more entries.</div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          );
           const steps=[
             {done:hasDelivery,num:1,title:"Log your first delivery",sub:"Record how much gas you received and the supplier cost per kg.",cta:"Add delivery",fn:goStock},
             {done:hasPrice,num:2,title:"Set your selling price",sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",fn:goSetPrice},
@@ -4532,9 +4546,16 @@ export default function GasLedgerApp() {
   const [screen,        setScreen]        = useState("dashboard");
   const [prevScreen,    setPrevScreen]     = useState("dashboard");
   const [detail,        setDetail]        = useState(null);
+  const [justSaved,     setJustSaved]     = useState(false);
 
   // Navigate with back-tracking
   const goScreen = (s) => { setPrevScreen(screen); setScreen(s); };
+
+  // Mark a recent save — forces dashboard spinner for 800ms to let Firestore sync
+  const onSaveComplete = () => {
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 800);
+  };
   const [pendingInvite, setPendingInvite] = useState(null);
   const [inviteChecked, setInviteChecked] = useState(false);
   const [monthlyKey,    setMonthlyKey]    = useState(null); // "2025-06" → opens P&L for that month
@@ -4574,6 +4595,7 @@ export default function GasLedgerApp() {
 
   const addEntry      = useCallback(async (e) => {
     await fbAddEntry(plantId, { ...e, staffUid: user?.uid||"" });
+    onSaveComplete(); // trigger 800ms spinner so Firestore snapshot arrives before dashboard
     if (isStaff) {
       const phone  = plantDoc?.waPhone      || "";
       const tok    = plantDoc?.waToken      || "";
@@ -4714,7 +4736,7 @@ export default function GasLedgerApp() {
   );
 
   // ── Data loading ──────────────────────────────────────────
-  if ((eLd||dLd||pLd) && screen==="dashboard") return <Shell><Spinner/></Shell>;
+  if ((eLd||dLd||pLd||justSaved) && screen==="dashboard") return <Shell><Spinner/></Shell>;
 
   // ── Gate function — blocks staff from owner-only screens ──
   const Gate = ({children, allowed=true}) => allowed ? children : (
