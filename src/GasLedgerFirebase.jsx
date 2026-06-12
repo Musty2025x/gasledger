@@ -1055,6 +1055,8 @@ const DailyEntry = ({back, onSave, lastEntry, allEntries=[], allPrices=[], allDe
     setLd(true); setErr("");
     try {
       await onSave({date,openMeter:Number(open),closeMeter:Number(close),cashSales:Number(cash)||0,posSales:Number(pos)||0,expenses:exps.filter(x=>x.cat&&x.amt).map(x=>({cat:x.cat,amt:Number(x.amt)})),notes});
+      // Wait for Firestore onSnapshot to update entries before showing success
+      await new Promise(r=>setTimeout(r,700));
       setDone(true);
     } catch(e) { setErr(e.message||"Save failed. Try again."); }
     finally { setLd(false); }
