@@ -1367,7 +1367,7 @@ const Modal = ({title, onClose, children}) => (
   </div>
 );
 
-const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery, onDeleteDelivery, onDeletePrice, onUpdatePrice, back}) => {
+const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery, onDeleteDelivery, onDeletePrice, onUpdatePrice, back, loading=false}) => {
   // Auto-switch to prices tab if navigated from onboarding "Set price" CTA
   const initTab = window.__stockTab || "deliveries";
   const [tab, setTab] = useState(initTab);
@@ -1411,6 +1411,8 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
     if(!delKg||!delSup) return; setLd(true);
     try {
       await onAddDelivery({date:delDate,kg:Number(delKg),supplier:delSup,pricePerKg:Number(delPx)||0,note:delNote});
+      // Small delay so Firestore snapshot arrives before modal closes
+      await new Promise(r=>setTimeout(r,600));
       setShowDel(false); setDelKg(""); setDelSup(""); setDelPx(""); setDelNote("");
     } finally { setLd(false); }
   };
@@ -1422,6 +1424,7 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
         date:editDate, kg:Number(editKg),
         supplier:editSup, pricePerKg:Number(editPx)||0, note:editNote,
       });
+      await new Promise(r=>setTimeout(r,600));
       setEditDel(null);
     } finally { setLd(false); }
   };
@@ -1436,8 +1439,11 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
 
   const savePx = async () => {
     if(!pxPrice) return; setLd(true);
-    try { await onAddPrice({date:pxDate,pricePerKg:Number(pxPrice),note:pxNote}); setShowPx(false); setPxPrice(""); setPxNote(""); }
-    finally { setLd(false); }
+    try {
+      await onAddPrice({date:pxDate,pricePerKg:Number(pxPrice),note:pxNote});
+      await new Promise(r=>setTimeout(r,600));
+      setShowPx(false); setPxPrice(""); setPxNote("");
+    } finally { setLd(false); }
   };
 
   const openEditDel = (del) => {
@@ -1470,6 +1476,13 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
           </button>
         ))}
       </div>
+      {/* Syncing indicator */}
+      {loading&&(
+        <div style={{background:`${T.primary}10`,padding:"8px 16px",display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}>
+          <div style={{width:12,height:12,borderRadius:"50%",border:`2px solid ${T.primary}`,borderTopColor:"transparent",animation:"spin 0.8s linear infinite",flexShrink:0}}/>
+          <span style={{fontSize:12,color:T.primary,fontFamily:F}}>Syncing data…</span>
+        </div>
+      )}
 
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 24px"}}>
         {tab==="deliveries"&&(<>
@@ -4723,7 +4736,7 @@ export default function GasLedgerApp() {
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser} notifs={notifs} unread={unread} onMarkRead={markAllRead}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
-        {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} back={()=>setScreen("dashboard")}/></Gate>}
+        {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} loading={dLd||pLd} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
         {screen==="expenses"    && <Gate allowed={!isStaff}><ExpensesScreen expenses={standaloneExpenses} entries={entries} onAdd={addExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} back={()=>setScreen("dashboard")}/></Gate>}
