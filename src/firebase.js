@@ -87,9 +87,14 @@ export const userDoc       = (uid)     => doc(db, "users", uid);
 
 import { useState, useEffect } from "react";
 
+// Module-level cache — persists across component mounts/unmounts
+// This prevents dashboard showing stale empty data after navigation
+const _cache = {};
+
 const useCollection = (colRef, orderField = "date", dir = "desc") => {
-  const [data,    setData]    = useState([]);
-  const [loading, setLoading] = useState(true);
+  const key = colRef?.path || "__null__";
+  const [data,    setData]    = useState(() => _cache[key] || []);
+  const [loading, setLoading] = useState(!_cache[key]);
   const [error,   setError]   = useState(null);
 
   useEffect(() => {
@@ -98,7 +103,9 @@ const useCollection = (colRef, orderField = "date", dir = "desc") => {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        setData(snapshot.docs.map(snap));
+        const docs = snapshot.docs.map(snap);
+        _cache[key] = docs;          // update cache
+        setData(docs);
         setLoading(false);
       },
       (err) => {
@@ -107,8 +114,8 @@ const useCollection = (colRef, orderField = "date", dir = "desc") => {
         setLoading(false);
       }
     );
-    return unsub; // cleanup on unmount
-  }, [colRef?.path]);   // re-subscribe if plantId changes
+    return unsub;
+  }, [colRef?.path]);
 
   return { data, loading, error };
 };
