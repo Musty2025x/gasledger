@@ -800,32 +800,51 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
 
         {/* Onboarding checklist — owner only */}
         {role==="owner"&&(()=>{
-          const hasDelivery=stock.periods.length>0;
-          const hasPrice=SP>DEFAULT_SELL_PRICE||(sellPrice&&sellPrice>0);
-          const hasEntry=entries.length>0;
-          const allDone=hasDelivery&&hasPrice&&hasEntry;
-          if(allDone) return (
+          const hasDelivery = stock.periods.length > 0;
+          const hasPrice    = SP > DEFAULT_SELL_PRICE || (sellPrice && sellPrice > 0);
+          const hasEntry    = entries.length > 0;
+          const allDone     = hasDelivery && hasPrice && hasEntry;
+
+          // Dismiss permanently after first entry using localStorage
+          const dismissKey = `gasledger_setup_done_${plantName}`;
+          const dismissed  = (() => { try { return !!localStorage.getItem(dismissKey); } catch { return false; } })();
+          if (dismissed) return null;
+          if (allDone) {
+            try { localStorage.setItem(dismissKey, "1"); } catch {}
+            return null;
+          }
+
+          // After delivery + price set → show celebration + CTA to log first entry
+          if (hasDelivery && hasPrice && !hasEntry) return (
             <div style={{marginBottom:16}}>
-              <Card pad="14px">
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:36,height:36,borderRadius:"50%",background:`${T.success}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <Icon n="check" s={18} c={T.success}/>
+              <Card pad="0">
+                <div style={{background:T.primary,borderRadius:`${R.lg}px ${R.lg}px 0 0`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Icon n="check" s={18} c={T.gold}/>
                   </div>
                   <div>
-                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Setup complete 🎉</div>
-                    <div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2}}>Your plant is ready. Dashboard updates as you log more entries.</div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:F}}>Plant is ready! 🎉</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:2,fontFamily:F}}>Delivery and price set — log your first entry to start tracking profit</div>
                   </div>
+                </div>
+                <div style={{padding:"12px 16px"}}>
+                  <button onClick={goEntry}
+                    style={{width:"100%",padding:"11px",background:T.primary,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                    <Icon n="plus" s={15} c="#fff"/>
+                    Log today's entry
+                  </button>
                 </div>
               </Card>
             </div>
           );
-          const steps=[
-            {done:hasDelivery,num:1,title:"Log your first delivery",sub:"Record how much gas you received and the supplier cost per kg.",cta:"Add delivery",fn:goStock},
-            {done:hasPrice,num:2,title:"Set your selling price",sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",fn:goSetPrice},
-            {done:hasEntry,num:3,title:"Log your first daily entry",sub:"Record today's meter readings and cash collected.",cta:"New entry",fn:goEntry},
+
+          const steps = [
+            {done:hasDelivery,num:1,title:"Log your first delivery",  sub:"Record how much gas you received and the supplier cost per kg.", cta:"Add delivery",fn:goStock},
+            {done:hasPrice,   num:2,title:"Set your selling price",   sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",   fn:goSetPrice},
+            {done:hasEntry,   num:3,title:"Log your first daily entry",sub:"Record today's meter readings and cash collected.",               cta:"New entry",   fn:goEntry},
           ];
-          const doneCount=steps.filter(s=>s.done).length;
-          const pct=Math.round((doneCount/3)*100);
+          const doneCount = steps.filter(s=>s.done).length;
+          const pct       = Math.round((doneCount/3)*100);
           return (
             <div style={{marginBottom:16}}>
               <Card pad="0">
