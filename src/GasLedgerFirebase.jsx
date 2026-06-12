@@ -4563,18 +4563,8 @@ export default function GasLedgerApp() {
   const [screen,        setScreen]        = useState("dashboard");
   const [prevScreen,    setPrevScreen]     = useState("dashboard");
   const [detail,        setDetail]        = useState(null);
-  const [justSaved,     setJustSaved]     = useState(false);
-
-  // Navigate with back-tracking — clear justSaved when going to dashboard
-  const goScreen = (s) => {
-    setPrevScreen(screen);
-    setScreen(s);
-  };
-
-  // Mark a recent save — stays true until entries/deliveries/prices reload
-  const onSaveComplete = () => {
-    setJustSaved(true);
-  };
+  // Navigate with back-tracking
+  const goScreen = (s) => { setPrevScreen(screen); setScreen(s); };
   const [pendingInvite, setPendingInvite] = useState(null);
   const [inviteChecked, setInviteChecked] = useState(false);
   const [monthlyKey,    setMonthlyKey]    = useState(null); // "2025-06" → opens P&L for that month
@@ -4600,16 +4590,7 @@ export default function GasLedgerApp() {
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
 
-  // Clear justSaved when data actually updates OR after 2s max
-  const entriesLen    = entries?.length    || 0;
-  const deliveriesLen = deliveries?.length || 0;
-  const pricesLen     = prices?.length     || 0;
-  useEffect(() => {
-    if (!justSaved) return;
-    // Clear immediately if data already loaded (entriesLen already reflects new entry)
-    const t = setTimeout(() => setJustSaved(false), 1500);
-    return () => clearTimeout(t);
-  }, [justSaved, entriesLen, deliveriesLen, pricesLen]);
+
 
   // ── Notifications ──────────────────────────────────────────
   const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries||[], standaloneExpenses||[], role);
@@ -4635,8 +4616,8 @@ export default function GasLedgerApp() {
       sendWhatsAppNotif(phone, tok, instId, msg);
     }
   }, [plantId, user?.uid, isStaff, profile?.displayName, plantDoc]);
-  const addDelivery   = useCallback(async d => { await fbAddDelivery(plantId,d); onSaveComplete(); }, [plantId]);
-  const addPrice      = useCallback(async p => { await fbAddPrice(plantId,p);    onSaveComplete(); }, [plantId]);
+  const addDelivery   = useCallback(d => fbAddDelivery(plantId,d), [plantId]);
+  const addPrice      = useCallback(p => fbAddPrice(plantId,p),    [plantId]);
   const deletePrice   = useCallback(id  => fbDeletePrice(plantId,id),      [plantId]);
   const updatePriceItem = useCallback((id,d) => fbUpdatePrice(plantId,id,d),[plantId]);
   const addRemittance      = useCallback(r   => fbAddRemittance(plantId,r),             [plantId]);
@@ -4766,7 +4747,6 @@ export default function GasLedgerApp() {
 
   // ── Data loading ──────────────────────────────────────────
   if ((eLd||dLd||pLd) && screen==="dashboard") return <Shell><Spinner/></Shell>;
-  if (justSaved && screen==="dashboard") return <Shell><Spinner/></Shell>;
 
   // ── Gate function — blocks staff from owner-only screens ──
   const Gate = ({children, allowed=true}) => allowed ? children : (
@@ -4789,7 +4769,7 @@ export default function GasLedgerApp() {
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser} notifs={notifs} unread={unread} onMarkRead={markAllRead}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
-        {screen==="entry"       && <DailyEntry back={()=>{ onSaveComplete(); setScreen("dashboard"); }} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
+        {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} loading={dLd||pLd} back={()=>setScreen("dashboard")}/></Gate>}
         {screen==="pnl"         && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("dashboard")} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
         {screen==="pnl-monthly" && <Gate allowed={!isStaff}><PnLScreen entries={entries} prices={prices} deliveries={deliveries} back={()=>setScreen("monthly")} sellPrice={livePrice} costPrice={liveCost} initialMonth={monthlyKey} standaloneExpenses={standaloneExpenses} canExportPdf={planLimits.pdf} onUpgrade={()=>setScreen("settings")}/></Gate>}
