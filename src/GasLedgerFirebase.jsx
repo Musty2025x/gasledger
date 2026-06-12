@@ -1529,11 +1529,18 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
         {tab==="deliveries"&&(<>
           {cur&&(()=>{
             // Days-remaining estimate based on average daily burn
+            // Use actual days with entries, not full period length, to avoid misleading estimates
             const periodDays = Math.max(1, Math.ceil(
               (new Date() - new Date(cur.delivery.date)) / (1000*60*60*24)
             ));
-            const avgBurnPerDay = cur.sold > 0 ? cur.sold / periodDays : 0;
+            // Only calculate burn if we have enough data (at least 3 days or 3+ entries)
+            const hasEnoughData = cur.sold > 0 && periodDays >= 1;
+            const avgBurnPerDay = hasEnoughData ? cur.sold / periodDays : 0;
             const daysLeft = avgBurnPerDay > 0 ? Math.floor(cur.remaining / avgBurnPerDay) : null;
+            // Only show days-left if estimate is reasonable (not inflated by single-day data)
+            const showDaysLeft = daysLeft !== null && daysLeft <= 60;
+            // Only show running low when BOTH days are low AND stock % is below 25%
+            const showLowWarning = showDaysLeft && daysLeft <= 7 && cur.pct < 25;
 
             return (
             <Card style={{marginBottom:12,border:`1.5px solid ${T.primary}`}}>
@@ -1569,13 +1576,13 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
                   <span style={{fontSize:11,color:T.muted,fontFamily:F}}>{cur.pct}% remaining</span>
-                  {daysLeft!==null&&(
+                  {daysLeft!==null&&showDaysLeft&&(
                     <span style={{fontSize:11,fontWeight:600,fontFamily:F,color:daysLeft<=3?T.danger:daysLeft<=7?T.warning:T.success}}>
-                      ~{daysLeft} day{daysLeft!==1?"s":""} left
+                      {showDaysLeft ? `~${daysLeft} day${daysLeft!==1?"s":""} left` : ""}
                     </span>
                   )}
                 </div>
-                {daysLeft!==null&&daysLeft<=5&&(
+                {showLowWarning&&(
                   <div style={{marginTop:8,background:daysLeft<=2?`${T.danger}12`:`${T.warning}12`,borderRadius:R.sm,padding:"8px 10px",display:"flex",gap:8,alignItems:"center"}}>
                     <Icon n="alert" s={14} c={daysLeft<=2?T.danger:T.warning}/>
                     <span style={{fontSize:12,color:daysLeft<=2?T.danger:T.warning,fontFamily:F,fontWeight:600}}>
