@@ -4574,8 +4574,6 @@ export default function GasLedgerApp() {
   // Mark a recent save — stays true until entries/deliveries/prices reload
   const onSaveComplete = () => {
     setJustSaved(true);
-    // Safety fallback: clear after 5s if Firestore hasn't updated
-    setTimeout(() => setJustSaved(false), 5000);
   };
   const [pendingInvite, setPendingInvite] = useState(null);
   const [inviteChecked, setInviteChecked] = useState(false);
@@ -4602,13 +4600,16 @@ export default function GasLedgerApp() {
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
 
-  // Clear justSaved when Firestore data actually changes after a save
+  // Clear justSaved when data actually updates OR after 2s max
   const entriesLen    = entries?.length    || 0;
   const deliveriesLen = deliveries?.length || 0;
   const pricesLen     = prices?.length     || 0;
   useEffect(() => {
-    if (justSaved) setJustSaved(false);
-  }, [entriesLen, deliveriesLen, pricesLen]);
+    if (!justSaved) return;
+    // Clear immediately if data already loaded (entriesLen already reflects new entry)
+    const t = setTimeout(() => setJustSaved(false), 1500);
+    return () => clearTimeout(t);
+  }, [justSaved, entriesLen, deliveriesLen, pricesLen]);
 
   // ── Notifications ──────────────────────────────────────────
   const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries||[], standaloneExpenses||[], role);
