@@ -4567,13 +4567,17 @@ export default function GasLedgerApp() {
   const [detail,        setDetail]        = useState(null);
   const [justSaved,     setJustSaved]     = useState(false);
 
-  // Navigate with back-tracking
-  const goScreen = (s) => { setPrevScreen(screen); setScreen(s); };
+  // Navigate with back-tracking — clear justSaved when going to dashboard
+  const goScreen = (s) => {
+    setPrevScreen(screen);
+    setScreen(s);
+  };
 
-  // Mark a recent save — forces dashboard spinner for 800ms to let Firestore sync
+  // Mark a recent save — stays true until entries/deliveries/prices reload
   const onSaveComplete = () => {
     setJustSaved(true);
-    setTimeout(() => setJustSaved(false), 800);
+    // Safety fallback: clear after 5s if Firestore hasn't updated
+    setTimeout(() => setJustSaved(false), 5000);
   };
   const [pendingInvite, setPendingInvite] = useState(null);
   const [inviteChecked, setInviteChecked] = useState(false);
@@ -4599,6 +4603,14 @@ export default function GasLedgerApp() {
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
+
+  // Clear justSaved when Firestore data actually changes after a save
+  const entriesLen    = entries?.length    || 0;
+  const deliveriesLen = deliveries?.length || 0;
+  const pricesLen     = prices?.length     || 0;
+  useEffect(() => {
+    if (justSaved) setJustSaved(false);
+  }, [entriesLen, deliveriesLen, pricesLen]);
 
   // ── Notifications ──────────────────────────────────────────
   const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries||[], standaloneExpenses||[], role);
@@ -4755,7 +4767,8 @@ export default function GasLedgerApp() {
   );
 
   // ── Data loading ──────────────────────────────────────────
-  if ((eLd||dLd||pLd||justSaved) && screen==="dashboard") return <Shell><Spinner/></Shell>;
+  if ((eLd||dLd||pLd) && screen==="dashboard") return <Shell><Spinner/></Shell>;
+  if (justSaved) return <Shell><Spinner/></Shell>;
 
   // ── Gate function — blocks staff from owner-only screens ──
   const Gate = ({children, allowed=true}) => allowed ? children : (
