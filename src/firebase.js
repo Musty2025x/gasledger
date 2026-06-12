@@ -88,14 +88,30 @@ export const userDoc       = (uid)     => doc(db, "users", uid);
 import { useState, useEffect } from "react";
 
 // Module-level cache — persists across component mounts/unmounts
-// This prevents dashboard showing stale empty data after navigation
 const _cache = {};
+const _listeners = {};  // notify components when cache updates externally
+
+const notifyListeners = (key) => {
+  (_listeners[key] || []).forEach(fn => fn());
+};
 
 const useCollection = (colRef, orderField = "date", dir = "desc") => {
   const key = colRef?.path || "__null__";
   const [data,    setData]    = useState(() => _cache[key] || []);
   const [loading, setLoading] = useState(!_cache[key]);
   const [error,   setError]   = useState(null);
+
+  // Register as listener for external cache updates (e.g. after getDocs refresh)
+  useEffect(() => {
+    const listener = () => {
+      if (_cache[key]) setData([..._cache[key]]);
+    };
+    _listeners[key] = _listeners[key] || [];
+    _listeners[key].push(listener);
+    return () => {
+      _listeners[key] = (_listeners[key] || []).filter(f => f !== listener);
+    };
+  }, [key]);
 
   useEffect(() => {
     if (!colRef) return;
@@ -104,7 +120,8 @@ const useCollection = (colRef, orderField = "date", dir = "desc") => {
       q,
       (snapshot) => {
         const docs = snapshot.docs.map(snap);
-        _cache[key] = docs;          // update cache
+        _cache[key] = docs;
+        notifyListeners(key);
         setData(docs);
         setLoading(false);
       },
@@ -123,6 +140,19 @@ const useCollection = (colRef, orderField = "date", dir = "desc") => {
 // Entries  — ordered newest first
 export const useEntries = (plantId) =>
   useCollection(plantId ? entriesCol(plantId) : null, "date", "desc");
+
+// Force a one-time fetch to refresh entries cache immediately after a write
+export const refreshEntries = async (plantId) => {
+  if (!plantId) return;
+  const key = `plants/${plantId}/entries`;
+  try {
+    const q = query(entriesCol(plantId), orderBy("date", "desc"));
+    const snapshot = await getDocs(q);
+    const docs = snapshot.docs.map(snap);
+    _cache[key] = docs;
+    notifyListeners(key);  // tell useCollection to re-render
+  } catch(e) { console.warn("refreshEntries failed:", e.message); }
+};
 
 // Deliveries — ordered newest first
 export const useDeliveries = (plantId) =>

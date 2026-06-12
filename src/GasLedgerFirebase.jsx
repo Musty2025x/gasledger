@@ -11,6 +11,7 @@ import {
   useStandaloneExpenses,
   useStaffExpenses,
   usePlant,
+  refreshEntries as fbRefreshEntries,
   addEntry              as fbAddEntry,
   addDelivery           as fbAddDelivery,
   addPrice              as fbAddPrice,
@@ -4613,6 +4614,8 @@ export default function GasLedgerApp() {
 
   const addEntry      = useCallback(async (e) => {
     await fbAddEntry(plantId, { ...e, staffUid: user?.uid||"" });
+    // Force-refresh the entries cache so dashboard shows new data immediately
+    await fbRefreshEntries(plantId);
     if (isStaff) {
       const phone  = plantDoc?.waPhone      || "";
       const tok    = plantDoc?.waToken      || "";
