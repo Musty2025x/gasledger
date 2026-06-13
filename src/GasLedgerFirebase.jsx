@@ -3194,7 +3194,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             }
             setBillingLd(plan.id); setBillingErr(""); setBillingOk("");
             const handler = window.PaystackPop.setup({
-              key:      import.meta.env.VITE_PAYSTACK_LIVE_KEY,
+              key:      import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_1234567890abcdef",
               email:    user.email,
               amount:   plan.price * 100,
               currency: "NGN",
