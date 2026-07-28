@@ -31,6 +31,9 @@ import {
   loginUser, registerUser, resetPassword, signOutUser,
 } from "./firebase.js";
 
+// ── Paystack public key (from .env) ──────────────────────────
+const PAYSTACK_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+
 // ── Billing stubs (Paystack not yet active) ──────────────────
 const getPlan             = (profile) => profile?.plan || "free";
 const fbUpdatePlan        = async () => {};
