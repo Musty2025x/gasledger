@@ -42,11 +42,6 @@ const getPlanLimits = (plan) => {
   if (plan === "basic") return { maxStaff:2,        maxEntries:Infinity, pdf:true,  whatsapp:true,  notifications:true  };
   return                       { maxStaff:0,        maxEntries:30,       pdf:false, whatsapp:false, notifications:false };
 };
-const fbUpdateNotifSettings = async (plantId, creds) => {
-  // Dynamically import to avoid circular deps
-  const { updateNotifSettings } = await import("./firebase.js");
-  return updateNotifSettings(plantId, creds);
-};
 
 
 // ── Tokens ───────────────────────────────────────────────────
@@ -121,14 +116,16 @@ const buildStockPeriods = (entries, deliveries) => {
   const periods = sorted.map((del,idx) => {
     const ps = new Date(del.date);
     const pe = idx < sorted.length-1 ? new Date(sorted[idx+1].date) : null;
-    const sold = entries
-      .filter(e=>{ const d=new Date(e.date); return d>=ps&&(pe===null||d<pe); })
-      .reduce((s,e)=>s+(e.closeMeter-e.openMeter),0);
+    const periodEntries = entries
+      .filter(e=>{ const d=new Date(e.date); return d>=ps&&(pe===null||d<pe); });
+    const sold = periodEntries.reduce((s,e)=>s+(e.closeMeter-e.openMeter),0);
+    // Count distinct days that have entries — used for accurate burn rate
+    const entryDays = new Set(periodEntries.map(e=>e.date)).size;
     const available = carry + del.kg;
     const remaining = Math.max(0, available - sold);
     const cf = carry;
     carry = remaining;
-    return { delivery:del, available, sold, carryForward:cf, remaining, isOpen:pe===null };
+    return { delivery:del, available, sold, carryForward:cf, remaining, isOpen:pe===null, entryDays };
   });
   const cur = periods[periods.length-1];
   const pct = cur.available>0 ? Math.round((cur.remaining/cur.available)*100) : 0;
@@ -582,32 +579,29 @@ const NotificationsPanel = ({ notifs, onClose, onMarkRead }) => (
 
 // ═══════════════════════════════════════════════════════════════
 // WHATSAPP NOTIFICATION
-// Primary: UltraMsg API (free tier 500 msgs/month, works in Nigeria)
 // Fallback: opens WhatsApp with pre-filled message on owner's device
 // ═══════════════════════════════════════════════════════════════
-const sendWhatsAppNotif = async (phone, token, instanceId, message) => {
-  if (!phone) return;
-
-  // If UltraMsg credentials exist, use the API
-  if (token && instanceId) {
-    try {
-      await fetch(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body:    new URLSearchParams({ token, to: phone, body: message }),
-      });
-      return;
-    } catch(e) {
-      console.warn("UltraMsg failed:", e.message);
-    }
-  }
-
-  // Fallback: no API — show a WhatsApp link the owner can tap
-  // (useful when API not set up yet)
-  console.log("WhatsApp notif (no API):", message);
-};
+const ONESIGNAL_APP_ID = "f08bb63c-1fc1-4933-9329-552403c4264f";
 
 // ── Notification hook — watches for staff activity since last visit ──
+// ═══════════════════════════════════════════════════════════════
+// WHATSAPP NOTIFICATION via UltraMsg
+// Free tier: 500 messages/month · works in Nigeria
+// Credentials stored in Firestore plant doc (readable by staff)
+// ═══════════════════════════════════════════════════════════════
+const sendWhatsAppNotif = async (phone, token, instanceId, message) => {
+  if (!phone || !token || !instanceId) return;
+  try {
+    await fetch(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body:    new URLSearchParams({ token, to: phone, body: message }),
+    });
+  } catch(e) {
+    console.warn("WhatsApp notification failed:", e.message);
+  }
+};
+
 const useNotifications = (plantId, ownerUid, entries, standaloneExpenses, role) => {
   const getStorageKey = () => plantId ? `gasledger_last_seen_${plantId}` : null;
 
@@ -851,11 +845,64 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           const pct       = Math.round((doneCount/3)*100);
           return (
             <div style={{marginBottom:16}}>
+
+              {/* Preview card — shown only before any step is done */}
+              {doneCount===0&&(
+                <div style={{marginBottom:12,borderRadius:R.lg,overflow:"hidden",border:`1px solid ${T.border}`}}>
+                  {/* Header */}
+                  <div style={{background:T.primary,padding:"14px 16px"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F,marginBottom:2}}>Here's what you're building 👇</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Complete 3 steps to unlock your live dashboard</div>
+                  </div>
+                  {/* Mock dashboard preview */}
+                  <div style={{background:T.bg,padding:"12px 14px",filter:"blur(1.5px)",userSelect:"none",pointerEvents:"none"}}>
+                    {/* Mock stats row */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                      {[["Today's Sales","₦112,400",T.text],["Gross Profit","₦38,200",T.success]].map(([l,v,c])=>(
+                        <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:10,color:T.muted,fontFamily:F,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>{l}</div>
+                          <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:F}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Mock stock bar */}
+                    <div style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`,marginBottom:10}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                        <span style={{fontSize:11,color:T.muted,fontFamily:F}}>Stock remaining</span>
+                        <span style={{fontSize:11,fontWeight:600,color:T.success,fontFamily:F}}>68%</span>
+                      </div>
+                      <div style={{height:6,borderRadius:R.pill,background:T.bg2}}>
+                        <div style={{height:"100%",width:"68%",background:T.success,borderRadius:R.pill}}/>
+                      </div>
+                    </div>
+                    {/* Mock P&L row */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                      {[["Revenue","₦748k"],["COGS","−₦560k"],["Margin","25%"]].map(([l,v])=>(
+                        <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"8px 10px",textAlign:"center",border:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:F}}>{v}</div>
+                          <div style={{fontSize:9,color:T.muted,fontFamily:F,marginTop:2}}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Overlay CTA */}
+                  <div style={{background:`${T.primary}08`,padding:"10px 14px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:12,color:T.primary,fontWeight:600,fontFamily:F}}>Your live data appears here</span>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      {[0,1,2].map(i=>(
+                        <div key={i} style={{width:6,height:6,borderRadius:"50%",background:i===0?T.primary:T.border}}/>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Setup checklist */}
               <Card pad="0">
                 <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${T.border}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started</div>
-                    <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{doneCount} of 3 done</span>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started — {doneCount} of 3 done</div>
+                    <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{pct}%</span>
                   </div>
                   <div style={{height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
                     <div style={{height:"100%",width:`${pct}%`,background:T.primary,borderRadius:R.pill,transition:"width .4s ease"}}/>
@@ -1532,17 +1579,16 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
         {tab==="deliveries"&&(<>
           {cur&&(()=>{
             // Days-remaining estimate based on average daily burn
-            // Use actual days with entries, not full period length, to avoid misleading estimates
             const periodDays = Math.max(1, Math.ceil(
               (new Date() - new Date(cur.delivery.date)) / (1000*60*60*24)
             ));
-            // Only calculate burn if we have enough data (at least 3 days or 3+ entries)
-            const hasEnoughData = cur.sold > 0 && periodDays >= 1;
-            const avgBurnPerDay = hasEnoughData ? cur.sold / periodDays : 0;
+            // Use actual number of entry days recorded in this period for a realistic burn rate
+            // Falls back to calendar days if no entries yet
+            const entryDaysInPeriod = cur.entryDays || periodDays;
+            const divisorDays = Math.max(1, entryDaysInPeriod);
+            const avgBurnPerDay = cur.sold > 0 ? cur.sold / divisorDays : 0;
             const daysLeft = avgBurnPerDay > 0 ? Math.floor(cur.remaining / avgBurnPerDay) : null;
-            // Only show days-left if estimate is reasonable (not inflated by single-day data)
-            const showDaysLeft = daysLeft !== null && daysLeft <= 60;
-            // Only show running low when BOTH days are low AND stock % is below 25%
+            const showDaysLeft = daysLeft !== null && daysLeft <= 60 && entryDaysInPeriod > 1;
             const showLowWarning = showDaysLeft && daysLeft <= 7 && cur.pct < 25;
 
             return (
@@ -2587,57 +2633,54 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
 };
 
 // Top-level sub-screen wrapper — must be outside SettingsScreen to prevent remount on keystrokes
-// Notification settings form — saves UltraMsg credentials to localStorage
-const NotifSettingsForm = ({ profile, plantId, onSaved }) => {
+// Notification settings form
+// Notification settings — UltraMsg WhatsApp credentials saved to Firestore plant doc
+const NotifSettingsForm = ({ profile, plantId, plantDoc }) => {
   const safeGet = (k) => { try{ return localStorage.getItem(k)||""; }catch{ return ""; } };
-  const [phone,      setPhone]      = useState(()=>safeGet("gasledger_wa_phone")||profile?.waPhone||"");
-  const [token,      setToken]      = useState(()=>safeGet("gasledger_wa_token"));
-  const [instanceId, setInstanceId] = useState(()=>safeGet("gasledger_wa_instanceid"));
-  const [ld,         setLd]         = useState(false);
-  const [ok,         setOk]         = useState("");
-  const [err,        setErr]        = useState("");
+  const safeSet = (k,v) => { try{ localStorage.setItem(k,v); }catch{} };
+  const [phone,      setPhone]      = useState(()=>plantDoc?.waPhone      || safeGet("gasledger_wa_phone"));
+  const [token,      setToken]      = useState(()=>plantDoc?.waToken      || safeGet("gasledger_wa_token"));
+  const [instanceId, setInstanceId] = useState(()=>plantDoc?.waInstanceId || safeGet("gasledger_wa_instanceid"));
+  const [ld,  setLd]  = useState(false);
+  const [ok,  setOk]  = useState("");
+  const [err, setErr] = useState("");
 
   const save = async () => {
-    if (!phone.trim()) { setErr("Enter your WhatsApp phone number."); return; }
-    if (!token.trim() || !instanceId.trim()) { setErr("Enter your UltraMsg instance ID and token."); return; }
+    if (!phone.trim())      { setErr("Enter your WhatsApp number."); return; }
+    if (!token.trim())      { setErr("Enter your UltraMsg token."); return; }
+    if (!instanceId.trim()) { setErr("Enter your UltraMsg instance ID."); return; }
     setLd(true); setErr(""); setOk("");
     try {
-      const safeSet = (k,v) => { try{ localStorage.setItem(k,v); }catch{} };
       safeSet("gasledger_wa_phone",      phone.trim());
       safeSet("gasledger_wa_token",      token.trim());
       safeSet("gasledger_wa_instanceid", instanceId.trim());
-      // Save to Firestore plant doc so staff devices can read credentials too
-      await fbUpdateNotifSettings(plantId, {
-        waPhone:      phone.trim(),
-        waToken:      token.trim(),
-        waInstanceId: instanceId.trim(),
+      // Save to Firestore so staff devices can read credentials too
+      const { updateDoc, doc, getFirestore } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+      await updateDoc(doc(getFirestore(), "plants", plantId), {
+        waPhone: phone.trim(), waToken: token.trim(), waInstanceId: instanceId.trim()
       });
-      setOk("Saved! Staff activity will now send WhatsApp alerts to your number.");
+      setOk("Saved! Staff activity will now send WhatsApp alerts.");
     } catch(e) { setErr("Failed to save. Try again."); }
     finally { setLd(false); }
   };
 
   const test = async () => {
-    const p = phone.trim(); const t = token.trim(); const i = instanceId.trim();
-    if (!p||!t||!i) { setErr("Fill in all fields and save first."); return; }
+    if (!phone||!token||!instanceId) { setErr("Fill and save all fields first."); return; }
     setOk("Sending test...");
-    await sendWhatsAppNotif(p, t, i, "✅ GasLedger test — WhatsApp notifications are working!");
+    await sendWhatsAppNotif(phone, token, instanceId, "✅ GasLedger test — WhatsApp notifications are working!");
     setOk("Test sent! Check your WhatsApp.");
   };
 
   return (
     <div>
       <Input label="Your WhatsApp number" value={phone} onChange={setPhone}
-        placeholder="e.g. 2348012345678"
-        hint="International format — 234 for Nigeria, no + sign"/>
+        placeholder="e.g. 2348012345678" hint="International format — 234 for Nigeria, no + sign"/>
       <div style={{height:12}}/>
       <Input label="UltraMsg Instance ID" value={instanceId} onChange={setInstanceId}
-        placeholder="e.g. instance12345"
-        hint="Found in your UltraMsg dashboard after creating an instance"/>
+        placeholder="e.g. instance12345" hint="From your UltraMsg dashboard"/>
       <div style={{height:12}}/>
       <Input label="UltraMsg Token" value={token} onChange={setToken}
-        placeholder="e.g. abc123xyz"
-        hint="Found next to your Instance ID in UltraMsg dashboard"/>
+        placeholder="e.g. abc123xyz" hint="Found next to Instance ID in UltraMsg dashboard"/>
       {err&&<ErrBanner msg={err}/>}
       {ok&&<div style={{background:`${T.success}10`,borderRadius:R.md,padding:"10px 12px",fontSize:13,color:T.success,fontFamily:F,marginTop:8}}>{ok}</div>}
       <div style={{height:16}}/>
@@ -2657,7 +2700,7 @@ const SettingsSubScreen = ({ title, onBack, children }) => (
 // ═══════════════════════════════════════════════════════════════
 // SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════════════
-const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0, planLimits={} }) => {
+const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0, planLimits={}, plantDoc=null }) => {
   const role = profile?.role || "owner";
   // ── Load Paystack script on mount ────────────────────────
   useEffect(() => {
@@ -3024,18 +3067,17 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
       <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
         <Icon n="alert" s={16} c={T.primary}/>
         <div style={{fontSize:12,color:T.text2,lineHeight:1.6,fontFamily:F}}>
-          Get a WhatsApp message when your staff logs a daily entry or records an expense. Uses <strong>UltraMsg</strong> — free tier, no credit card, works in Nigeria.
+          Get a WhatsApp message when staff logs an entry or expense. Uses <strong>UltraMsg</strong> — free tier, 500 msgs/month, works in Nigeria.
         </div>
       </div>
-
       <div style={{background:T.bg,borderRadius:R.lg,padding:"12px 14px",marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10,fontFamily:F}}>Setup (one time — 3 minutes)</div>
+        <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10,fontFamily:F}}>Setup — 3 minutes</div>
         {[
-          "Go to ultramsg.com and create a free account",
-          "Create a new instance — scan the QR code with your WhatsApp to connect it",
+          "Go to ultramsg.com → create free account",
+          "Create a new instance → scan QR code with your WhatsApp",
           "Copy your Instance ID and Token from the dashboard",
-          "Enter them below with your phone number and tap Save",
-          "Tap 'Send test message' to confirm it's working",
+          "Enter them below with your phone number → Save",
+          "Tap Send test message to confirm it works",
         ].map((s,i)=>(
           <div key={i} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
             <div style={{width:20,height:20,borderRadius:"50%",background:T.primary,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -3044,12 +3086,8 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             <span style={{fontSize:12,color:T.text2,lineHeight:1.5,fontFamily:F}}>{s}</span>
           </div>
         ))}
-        <div style={{marginTop:8,padding:"8px 10px",background:`${T.success}10`,borderRadius:R.md,fontSize:11,color:T.success,fontFamily:F}}>
-          Free tier: 500 messages/month. No credit card needed.
-        </div>
       </div>
-
-      <NotifSettingsForm profile={profile} plantId={plantId} onSaved={backFromSub}/>
+      <NotifSettingsForm profile={profile} plantId={plantId} plantDoc={plantDoc}/>
     </SettingsSubScreen>
   );
 
@@ -3141,7 +3179,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
               })()}
               onClick={()=>{ setInviteEmail(""); setInviteErr(""); setInviteOk(""); setSub("staff"); }}/>
             <Row icon="alert" label="Notifications"
-              sub={profile?.waPhone?"WhatsApp alerts active · tap to change":"Set up WhatsApp alerts for staff activity"}
+              sub={plantDoc?.waPhone?"WhatsApp alerts active · tap to change":"Set up WhatsApp alerts for staff activity"}
               onClick={()=>setSub("notifications")}/>
           </>)}
         </div>
@@ -3197,7 +3235,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             }
             setBillingLd(plan.id); setBillingErr(""); setBillingOk("");
             const handler = window.PaystackPop.setup({
-              key:      PAYSTACK_KEY,
+              key:      import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "",
               email:    user.email,
               amount:   plan.price * 100,
               currency: "NGN",
@@ -3306,9 +3344,13 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Version</span>
             <span style={{fontSize:14,color:T.muted,fontFamily:F}}>2.0.1</span>
           </div>
-          <div style={{padding:"12px 16px",background:T.surface,display:"flex",justifyContent:"space-between"}}>
+          <div style={{padding:"12px 16px",background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Plant ID</span>
-            <span style={{fontSize:11,color:T.muted,fontFamily:F,fontFamily:"monospace",letterSpacing:.5}}>{plantId?.slice(0,16)}…</span>
+            <span style={{fontSize:11,color:T.muted,fontFamily:"monospace",letterSpacing:.5}}>{plantId?.slice(0,16)}…</span>
+          </div>
+          <div style={{padding:"12px 16px",background:T.surface,display:"flex",justifyContent:"space-between"}}>
+            <span style={{fontSize:14,color:T.text,fontFamily:F}}>Built by</span>
+            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty · mustydevops.com.ng</span>
           </div>
         </div>
 
@@ -4604,6 +4646,11 @@ export default function GasLedgerApp() {
   const {staff: staffMembers           }    = useStaffMembers(plantId);
   const plantDoc                            = usePlant(plantId); // for WhatsApp creds
 
+  // WhatsApp credentials — stored in Firestore plant doc by owner, readable by staff
+  const waPhone      = plantDoc?.waPhone      || "";
+  const waToken      = plantDoc?.waToken      || "";
+  const waInstanceId = plantDoc?.waInstanceId || "";
+
   const stock     = buildStockPeriods(entries, deliveries);
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
@@ -4615,52 +4662,36 @@ export default function GasLedgerApp() {
 
   // WhatsApp credentials — read from Firestore plant doc (set by owner, readable by all plant members)
   // This ensures staff devices can send notifications to the owner
-  const waPhone      = plantDoc?.waPhone      || (()=>{ try{ return localStorage.getItem("gasledger_wa_phone")||"";      }catch{ return ""; } })();
-  const waToken      = plantDoc?.waToken      || (()=>{ try{ return localStorage.getItem("gasledger_wa_token")||"";      }catch{ return ""; } })();
-  const waInstanceId = plantDoc?.waInstanceId || (()=>{ try{ return localStorage.getItem("gasledger_wa_instanceid")||"";}catch{ return ""; } })();
 
-  // Helper: send WhatsApp alert to owner when staff does something
-  const notifyOwner = (msg) => { if (!isStaff) return; sendWhatsAppNotif(waPhone, waToken, waInstanceId, msg); };
 
   const addEntry      = useCallback(async (e) => {
     await fbAddEntry(plantId, { ...e, staffUid: user?.uid||"" });
-    // Force-refresh the entries cache so dashboard shows new data immediately
     await fbRefreshEntries(plantId);
     if (isStaff) {
-      const phone  = plantDoc?.waPhone      || "";
-      const tok    = plantDoc?.waToken      || "";
-      const instId = plantDoc?.waInstanceId || "";
-      const sales  = (e.cashSales||0) + (e.posSales||0);
-      const gas    = (e.closeMeter||0) - (e.openMeter||0);
-      const msg    = `📊 New entry from ${profile?.displayName||"Staff"}\n${e.date}\nSales: ₦${sales.toLocaleString("en-NG")} · Gas: ${gas} kg\nView: gasledger.hggas.com.ng`;
-      sendWhatsAppNotif(phone, tok, instId, msg);
+      const msg = `📊 New entry from ${profile?.displayName||"Staff"}\n${e.date}\nSales: ₦${((e.cashSales||0)+(e.posSales||0)).toLocaleString("en-NG")} · Gas: ${(e.closeMeter||0)-(e.openMeter||0)} kg\nView: gasledger.hggas.com.ng`;
+      sendWhatsAppNotif(plantDoc?.waPhone||"", plantDoc?.waToken||"", plantDoc?.waInstanceId||"", msg);
     }
   }, [plantId, user?.uid, isStaff, profile?.displayName, plantDoc]);
-  const addDelivery   = useCallback(d => fbAddDelivery(plantId,d), [plantId]);
-  const addPrice      = useCallback(p => fbAddPrice(plantId,p),    [plantId]);
-  const deletePrice   = useCallback(id  => fbDeletePrice(plantId,id),      [plantId]);
-  const updatePriceItem = useCallback((id,d) => fbUpdatePrice(plantId,id,d),[plantId]);
-  const addRemittance      = useCallback(r   => fbAddRemittance(plantId,r),             [plantId]);
-  const addExpense         = useCallback(e   => fbAddStandaloneExpense(plantId,e,user?.uid),  [plantId,user?.uid]);
+
+  const addDelivery        = useCallback(d   => fbAddDelivery(plantId, d),                    [plantId]);
+  const addPrice           = useCallback(p   => fbAddPrice(plantId, p),                       [plantId]);
+  const updateDelivery     = useCallback((id,d) => fbUpdateDelivery(plantId, id, d),          [plantId]);
+  const deleteDelivery     = useCallback(id  => fbDeleteDelivery(plantId, id),                [plantId]);
+  const deletePrice        = useCallback(id  => fbDeletePrice(plantId, id),                   [plantId]);
+  const updatePriceItem    = useCallback((id,d) => fbUpdatePrice(plantId, id, d),             [plantId]);
+  const addRemittance      = useCallback(r   => fbAddRemittance(plantId, r),                  [plantId]);
+  const addExpense         = useCallback(e   => fbAddStandaloneExpense(plantId, e, user?.uid||""), [plantId, user?.uid]);
+  const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId, id, d), [plantId]);
+  const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId, id),       [plantId]);
+  const updateEntry        = useCallback((id,d) => fbUpdateEntry(plantId, id, d),             [plantId]);
+  const deleteEntry        = useCallback(id  => fbDeleteEntry(plantId, id),                   [plantId]);
   const addShiftExpense    = useCallback(async (e) => {
     await fbAddShiftExpense(plantId, e);
-    // Notify owner when staff records an expense
     if (isStaff) {
-      // Read credentials fresh from plantDoc to avoid stale closure
-      const phone  = plantDoc?.waPhone      || "";
-      const tok    = plantDoc?.waToken      || "";
-      const instId = plantDoc?.waInstanceId || "";
       const msg = `💸 Staff expense recorded\n${profile?.displayName||"Staff"} · ${e.date}\n${e.category} — ₦${(e.amount||0).toLocaleString("en-NG")}${e.note?`\nNote: ${e.note}`:""}\nView: gasledger.hggas.com.ng`;
-      sendWhatsAppNotif(phone, tok, instId, msg);
+      sendWhatsAppNotif(plantDoc?.waPhone||"", plantDoc?.waToken||"", plantDoc?.waInstanceId||"", msg);
     }
   }, [plantId, isStaff, profile?.displayName, plantDoc]);
-  const updateExpenseItem  = useCallback((id,d) => fbUpdateStandaloneExpense(plantId,id,d),[plantId]);
-  const deleteExpenseItem  = useCallback(id  => fbDeleteStandaloneExpense(plantId,id),  [plantId]);
-  const updateEntry   = useCallback((id,d) => fbUpdateEntry(plantId,id,d),[plantId]);
-  const updateDelivery= useCallback((id,d) => fbUpdateDelivery(plantId,id,d),[plantId]);
-  const deleteEntry   = useCallback(id  => fbDeleteEntry(plantId,id),     [plantId]);
-  const deleteDelivery= useCallback(id  => fbDeleteDelivery(plantId,id),  [plantId]);
-  const openDetail    = useCallback(e   => {setDetail(e);setScreen("detail");}, []);
 
   // After login, check for a pending invite (staff flow)
   useEffect(() => {
@@ -4800,7 +4831,7 @@ export default function GasLedgerApp() {
         {screen==="staffaccount"&& <StaffAccountScreen user={user} profile={profile} onSignOut={signOutUser} back={()=>setScreen("dashboard")}/> }
         {screen==="staffexpense"&& <StaffExpensesListScreen onAdd={addShiftExpense} onUpdate={updateExpenseItem} onDelete={deleteExpenseItem} submittedBy={user?.uid} back={()=>setScreen("dashboard")} allExpenses={standaloneExpenses}/>}
         {screen==="detail"      && detail && <DayDetail entry={detail} back={()=>setScreen("history")} sellPrice={livePrice} costPrice={liveCost} onUpdate={updateEntry} onDelete={deleteEntry} isOwner={!isStaff}/>}
-        {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost} planLimits={planLimits}/></Gate>}
+        {screen==="settings"    && <Gate allowed={!isStaff}><SettingsScreen user={user} profile={profile} plantId={plantId} onSignOut={signOutUser} invites={invites||[]} staffMembers={staffMembers||[]} liveCost={liveCost} planLimits={planLimits} plantDoc={plantDoc}/></Gate>}
       </div>
       {mainScreens.includes(screen) && <BottomNav active={screen==="pnl-monthly"?"monthly":screen==="staffexpense"?"staffexpense":screen==="staffaccount"?"staffaccount":screen==="entry"||screen==="history"||(screen==="detail"&&role==="owner")?"entryhub":screen} onChange={setScreen} role={role}/>}
     </Shell>
