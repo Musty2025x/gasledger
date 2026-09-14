@@ -1003,10 +1003,10 @@ const Dashboard = ({entries, stock, plantName, plantId, goEntry, goDayDetail, go
             {icon:"entry", label:"New entry",   fn:()=>window.__setScreen&&window.__setScreen("entryhub")},
             {icon:"cash",   label:"My expenses",  fn:()=>window.__setScreen&&window.__setScreen("staffexpense")},
           ]:[
-            {icon:"history",label:"All entries",     fn:()=>window.__setScreen&&window.__setScreen("history")},
             {icon:"pnl",    label:"P&L report",      fn:()=>window.__setScreen&&window.__setScreen("pnl")},
-            {icon:"truck",  label:"Stock tracker",   fn:()=>window.__setScreen&&window.__setScreen("stock")},
             {icon:"history",label:"Monthly summary",  fn:()=>window.__setScreen&&window.__setScreen("monthly")},
+            {icon:"history",label:"All entries",      fn:()=>window.__setScreen&&window.__setScreen("history")},
+            {icon:"truck",  label:"Stock tracker",    fn:()=>window.__setScreen&&window.__setScreen("stock")},
           ]).map(a=>(
             <div key={a.label} onClick={a.fn}
               style={{background:T.surface,borderRadius:R.lg,border:`1px solid ${T.border}`,padding:"13px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"background .12s"}}
@@ -3337,7 +3337,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
         <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
           <div style={{padding:"12px 16px",background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Version</span>
-            <span style={{fontSize:14,color:T.muted,fontFamily:F}}>1.0.1.1</span>
+            <span style={{fontSize:14,color:T.muted,fontFamily:F}}>2.0.1</span>
           </div>
           <div style={{padding:"12px 16px",background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Plant ID</span>
@@ -3345,7 +3345,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
           </div>
           <div style={{padding:"12px 16px",background:T.surface,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Built by</span>
-            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty</span>
+            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty · mustydevops.com.ng</span>
           </div>
         </div>
 
