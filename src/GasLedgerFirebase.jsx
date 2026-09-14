@@ -1,7 +1,7 @@
-// ═══════════════════════════════════════════════════════════════
+// =
 // GasLedgerFirebase.jsx  —  Clean native rebuild
 // System font · SVG icons · Full-viewport layout · No emoji
-// ═══════════════════════════════════════════════════════════════
+// =
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -34,17 +34,17 @@ import {
 // ── Paystack public key (from .env) ──────────────────────────
 const PAYSTACK_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
-// ── Billing stubs (Paystack not yet active) ──────────────────
+// - Billing stubs (Paystack not yet active) -
 const getPlan             = (profile) => profile?.plan || "free";
 const fbUpdatePlan        = async () => {};
 const getPlanLimits = (plan) => {
   if (plan === "pro")   return { maxStaff:Infinity, maxEntries:Infinity, pdf:true,  whatsapp:true,  notifications:true  };
   if (plan === "basic") return { maxStaff:2,        maxEntries:Infinity, pdf:true,  whatsapp:true,  notifications:true  };
   return                       { maxStaff:0,        maxEntries:30,       pdf:false, whatsapp:false, notifications:false };
-};
+};F
 
 
-// ── Tokens ───────────────────────────────────────────────────
+// - Tokens -
 const T = {
   primary:  "#0d3b2e", p2: "#145c44", p3: "#1a7a5a",
   gold:     "#e6a817", goldFg: "#0d3b2e",
@@ -58,7 +58,7 @@ const T = {
 const F = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 const R = { sm:6, md:10, lg:14, xl:18, pill:99 };
 
-// ── Helpers ──────────────────────────────────────────────────
+// - Helpers -
 const fmt   = (n) => "₦" + Math.round(n).toLocaleString("en-NG");
 const fmtKg = (n) => Math.round(n).toLocaleString("en-NG") + " kg";
 const fmtD  = (d) => new Date(d).toLocaleDateString("en-NG",{weekday:"short",day:"numeric",month:"short"});
@@ -82,7 +82,7 @@ const calcEntry = (e, sellingPrice = DEFAULT_SELL_PRICE, costPrice = DEFAULT_COS
   return { gas, sales, exp, expRev, cogs, grossProfit: grossP, profit: netP, variance };
 };
 
-// ── Date-aware price helpers ─────────────────────────────────
+// - Date-aware price helpers -
 // Returns the selling price that was active ON a given date
 // (the most recent price record on or before that date)
 const priceOnDate = (prices, date) => {
@@ -145,7 +145,7 @@ const latestCostPrice = (deliveries) => {
   return [...withPrice].sort((a,b)=>new Date(b.date)-new Date(a.date))[0].pricePerKg;
 };
 
-// ── SVG Icon set (no emoji, no external font) ────────────────
+// - SVG Icon set (no emoji, no external font) -
 const Icon = ({ n, s=20, c="currentColor" }) => {
   const paths = {
     home:     "M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z M9 21V12h6v9",
@@ -187,7 +187,7 @@ const Icon = ({ n, s=20, c="currentColor" }) => {
   );
 };
 
-// ── Primitives ───────────────────────────────────────────────
+// - Primitives -
 const Divider = ({my=0}) => <div style={{borderTop:`1px solid ${T.border}`,margin:`${my}px 0`}}/>;
 
 const Badge = ({label, variant="default"}) => {
@@ -269,7 +269,7 @@ const ErrBanner = ({msg}) => (
   <div style={{margin:"8px 16px",background:"#fee2e2",border:`1px solid #fca5a5`,borderRadius:R.md,padding:"10px 14px",fontSize:13,color:"#991b1b",fontFamily:F}}>{msg}</div>
 );
 
-// ── Top bar ──────────────────────────────────────────────────
+// - Top bar -
 const TopBar = ({title, left, right, dark=true}) => (
   <div style={{
     background: dark ? T.primary : T.surface,
@@ -286,7 +286,7 @@ const TopBar = ({title, left, right, dark=true}) => (
   </div>
 );
 
-// ── Bottom nav ───────────────────────────────────────────────
+// - Bottom nav -
 const BottomNav = ({active, onChange, role="owner"}) => {
   const ownerTabs = [
     {id:"dashboard",  icon:"home",     label:"Home"},
@@ -316,9 +316,9 @@ const BottomNav = ({active, onChange, role="owner"}) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // AUTH  — Sign in / Create account / Forgot password
-// ═══════════════════════════════════════════════════════════════
+// =
 const AuthScreen = ({onAuthed}) => {
   const [mode,    setMode]    = useState("login");
   const [email,   setEmail]   = useState("");
@@ -438,7 +438,7 @@ const AuthScreen = ({onAuthed}) => {
   );
 };
 
-// ── Invite acceptance (staff first login) ───────────────────
+// - Invite acceptance (staff first login) -
 const InviteAcceptScreen = ({ user, invite, onAccepted }) => {
   const [ld,  setLd]  = useState(false);
   const [err, setErr] = useState("");
@@ -500,7 +500,7 @@ const InviteAcceptScreen = ({ user, invite, onAccepted }) => {
   );
 };
 
-// ── Plant setup ──────────────────────────────────────────────
+// - Plant setup -
 const SetupScreen = ({user}) => {
   const [name, setName] = useState("");
   const [ld,   setLd]   = useState(false);
@@ -527,10 +527,10 @@ const SetupScreen = ({user}) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // DASHBOARD
-// ═══════════════════════════════════════════════════════════════
-// ── Notifications panel — slides over dashboard ──────────────
+// =
+// - Notifications panel — slides over dashboard -
 const NotificationsPanel = ({ notifs, onClose, onMarkRead }) => (
   <div style={{position:"absolute",inset:0,background:T.overlay,zIndex:200,display:"flex",flexDirection:"column"}}>
     <div style={{background:T.surface,flex:1,display:"flex",flexDirection:"column",maxHeight:"100%",overflow:"hidden"}}>
@@ -577,14 +577,14 @@ const NotificationsPanel = ({ notifs, onClose, onMarkRead }) => (
   </div>
 );
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // WHATSAPP NOTIFICATION
 // Fallback: opens WhatsApp with pre-filled message on owner's device
-// ═══════════════════════════════════════════════════════════════
+// =
 // Push notifications via FCM — coming when Firebase Blaze is available
 // In-app bell notifications are active and working
 
-// ── Notification hook — watches for staff activity since last visit ──
+// - Notification hook — watches for staff activity since last visit -
 const sendWhatsAppNotif = async (phone, token, instanceId, message) => {
   if (!phone || !token || !instanceId) return;
   try {
@@ -680,6 +680,121 @@ const useNotifications = (plantId, ownerUid, entries, standaloneExpenses, role) 
   };
 
   return { unread, notifs, markAllRead };
+};
+
+// - Onboarding checklist component -
+const OnboardingChecklist = ({ entries, stock, sellPrice, goEntry, goStock, goSetPrice }) => {
+  const hasDelivery = (stock?.periods||[]).length > 0;
+  const hasPrice    = sellPrice > 0 && sellPrice !== DEFAULT_SELL_PRICE;
+  const hasEntry    = (entries||[]).length > 0;
+  const allDone     = hasDelivery && hasPrice && hasEntry;
+
+  if (allDone) return null;
+
+  // After delivery + price set → show celebration + CTA to log first entry
+  if (hasDelivery && hasPrice && !hasEntry) return (
+    <div style={{marginBottom:16}}>
+      <Card pad="0">
+        <div style={{background:T.primary,borderRadius:`${R.lg}px ${R.lg}px 0 0`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Icon n="check" s={18} c={T.gold}/>
+          </div>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:F}}>Plant is ready! 🎉</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:2,fontFamily:F}}>Delivery and price set — log your first entry to start tracking profit</div>
+          </div>
+        </div>
+        <div style={{padding:"12px 16px"}}>
+          <button onClick={goEntry}
+            style={{width:"100%",padding:"11px",background:T.primary,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            <Icon n="plus" s={15} c="#fff"/>
+            Log today's entry
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+
+  const steps = [
+    {done:hasDelivery,num:1,title:"Log your first delivery",   sub:"Record how much gas you received and the supplier cost per kg.", cta:"Add delivery",fn:goStock},
+    {done:hasPrice,   num:2,title:"Set your selling price",    sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",   fn:goSetPrice},
+    {done:hasEntry,   num:3,title:"Log your first daily entry",sub:"Record today's meter readings and cash collected.",               cta:"New entry",   fn:goEntry},
+  ];
+  const doneCount = steps.filter(s=>s.done).length;
+  const pct       = Math.round((doneCount/3)*100);
+
+  return (
+    <div style={{marginBottom:16}}>
+      {/* Preview card — shown only before any step is done */}
+      {doneCount===0&&(
+        <div style={{marginBottom:12,borderRadius:R.lg,overflow:"hidden",border:`1px solid ${T.border}`}}>
+          <div style={{background:T.primary,padding:"14px 16px"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F,marginBottom:2}}>Here's what you're building 👇</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Complete 3 steps to unlock your live dashboard</div>
+          </div>
+          {/* Mock blurred dashboard preview */}
+          <div style={{background:T.bg,padding:"12px 14px",filter:"blur(1.5px)",userSelect:"none",pointerEvents:"none"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+              {[["Today's Sales","₦112,400",T.text],["Gross Profit","₦38,200",T.success]].map(([l,v,c])=>(
+                <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:10,color:T.muted,fontFamily:F,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>{l}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:F}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                <span style={{fontSize:11,color:T.muted,fontFamily:F}}>Stock remaining</span>
+                <span style={{fontSize:11,fontWeight:600,color:T.success,fontFamily:F}}>68%</span>
+              </div>
+              <div style={{height:6,borderRadius:R.pill,background:T.bg2}}>
+                <div style={{height:"100%",width:"68%",background:T.success,borderRadius:R.pill}}/>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+              {[["Revenue","₦748k"],["COGS","−₦560k"],["Margin","25%"]].map(([l,v])=>(
+                <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"8px 10px",textAlign:"center",border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:F}}>{v}</div>
+                  <div style={{fontSize:9,color:T.muted,fontFamily:F,marginTop:2}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{background:`${T.primary}08`,padding:"10px 14px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:12,color:T.primary,fontWeight:600,fontFamily:F}}>Your live data appears here</span>
+            <div style={{display:"flex",gap:4}}>
+              {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:i===0?T.primary:T.border}}/>)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Setup checklist */}
+      <Card pad="0">
+        <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started — {doneCount} of 3 done</div>
+            <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{pct}%</span>
+          </div>
+          <div style={{height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${pct}%`,background:T.primary,borderRadius:R.pill,transition:"width .4s ease"}}/>
+          </div>
+        </div>
+        {steps.map((s,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",opacity:s.done?0.55:1}}>
+            <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,marginTop:1,background:s.done?T.success:`${T.primary}12`,border:`1.5px solid ${s.done?T.success:T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {s.done?<Icon n="check" s={14} c="#fff"/>:<span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{s.num}</span>}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:s.done?400:600,color:T.text,fontFamily:F,textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
+              {!s.done&&<div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2,lineHeight:1.5}}>{s.sub}</div>}
+            </div>
+            {!s.done&&<button onClick={s.fn} style={{flexShrink:0,padding:"6px 12px",background:T.primary,border:"none",borderRadius:R.md,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",marginTop:1}}>{s.cta}</button>}
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
 };
 
 const Dashboard = ({entries, stock, plantName, plantId, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[], role="owner", onSignOut, notifs=[], unread=0, onMarkRead}) => {
@@ -794,130 +909,18 @@ const Dashboard = ({entries, stock, plantName, plantId, goEntry, goDayDetail, go
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 16px"}}>
 
         {/* Onboarding checklist — owner only */}
-        {role==="owner"&&stock&&(()=>{
-          const hasDelivery = (stock.periods||[]).length > 0;
-          const hasPrice    = SP > DEFAULT_SELL_PRICE || (sellPrice && sellPrice > 0);
-          const hasEntry    = entries.length > 0;
-          const allDone     = hasDelivery && hasPrice && hasEntry;
+        {role==="owner" && (
+          <OnboardingChecklist
+            entries={entries||[]}
+            stock={stock}
+            sellPrice={sellPrice}
+            goEntry={goEntry}
+            goStock={goStock}
+            goSetPrice={goSetPrice}
+          />
+        )}
 
-          // Show checklist until all 3 steps completed — no localStorage needed
-          // Once allDone, the checklist disappears naturally (entries.length > 0 means they've started)
-          if (allDone) return null;
-
-          // After delivery + price set → show celebration + CTA to log first entry
-          if (hasDelivery && hasPrice && !hasEntry) return (
-            <div style={{marginBottom:16}}>
-              <Card pad="0">
-                <div style={{background:T.primary,borderRadius:`${R.lg}px ${R.lg}px 0 0`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <Icon n="check" s={18} c={T.gold}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:F}}>Plant is ready! 🎉</div>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:2,fontFamily:F}}>Delivery and price set — log your first entry to start tracking profit</div>
-                  </div>
-                </div>
-                <div style={{padding:"12px 16px"}}>
-                  <button onClick={goEntry}
-                    style={{width:"100%",padding:"11px",background:T.primary,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                    <Icon n="plus" s={15} c="#fff"/>
-                    Log today's entry
-                  </button>
-                </div>
-              </Card>
-            </div>
-          );
-
-          const steps = [
-            {done:hasDelivery,num:1,title:"Log your first delivery",  sub:"Record how much gas you received and the supplier cost per kg.", cta:"Add delivery",fn:goStock},
-            {done:hasPrice,   num:2,title:"Set your selling price",   sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",   fn:goSetPrice},
-            {done:hasEntry,   num:3,title:"Log your first daily entry",sub:"Record today's meter readings and cash collected.",               cta:"New entry",   fn:goEntry},
-          ];
-          const doneCount = steps.filter(s=>s.done).length;
-          const pct       = Math.round((doneCount/3)*100);
-          return (
-            <div style={{marginBottom:16}}>
-
-              {/* Preview card — shown only before any step is done */}
-              {doneCount===0&&(
-                <div style={{marginBottom:12,borderRadius:R.lg,overflow:"hidden",border:`1px solid ${T.border}`}}>
-                  {/* Header */}
-                  <div style={{background:T.primary,padding:"14px 16px"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F,marginBottom:2}}>Here's what you're building 👇</div>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Complete 3 steps to unlock your live dashboard</div>
-                  </div>
-                  {/* Mock dashboard preview */}
-                  <div style={{background:T.bg,padding:"12px 14px",filter:"blur(1.5px)",userSelect:"none",pointerEvents:"none"}}>
-                    {/* Mock stats row */}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                      {[["Today's Sales","₦112,400",T.text],["Gross Profit","₦38,200",T.success]].map(([l,v,c])=>(
-                        <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-                          <div style={{fontSize:10,color:T.muted,fontFamily:F,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>{l}</div>
-                          <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:F}}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Mock stock bar */}
-                    <div style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`,marginBottom:10}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                        <span style={{fontSize:11,color:T.muted,fontFamily:F}}>Stock remaining</span>
-                        <span style={{fontSize:11,fontWeight:600,color:T.success,fontFamily:F}}>68%</span>
-                      </div>
-                      <div style={{height:6,borderRadius:R.pill,background:T.bg2}}>
-                        <div style={{height:"100%",width:"68%",background:T.success,borderRadius:R.pill}}/>
-                      </div>
-                    </div>
-                    {/* Mock P&L row */}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-                      {[["Revenue","₦748k"],["COGS","−₦560k"],["Margin","25%"]].map(([l,v])=>(
-                        <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"8px 10px",textAlign:"center",border:`1px solid ${T.border}`}}>
-                          <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:F}}>{v}</div>
-                          <div style={{fontSize:9,color:T.muted,fontFamily:F,marginTop:2}}>{l}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Overlay CTA */}
-                  <div style={{background:`${T.primary}08`,padding:"10px 14px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:12,color:T.primary,fontWeight:600,fontFamily:F}}>Your live data appears here</span>
-                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                      {[0,1,2].map(i=>(
-                        <div key={i} style={{width:6,height:6,borderRadius:"50%",background:i===0?T.primary:T.border}}/>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Setup checklist */}
-              <Card pad="0">
-                <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${T.border}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started — {doneCount} of 3 done</div>
-                    <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{pct}%</span>
-                  </div>
-                  <div style={{height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${pct}%`,background:T.primary,borderRadius:R.pill,transition:"width .4s ease"}}/>
-                  </div>
-                </div>
-                {steps.map((s,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",opacity:s.done?0.55:1}}>
-                    <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,marginTop:1,background:s.done?T.success:`${T.primary}12`,border:`1.5px solid ${s.done?T.success:T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                      {s.done?<Icon n="check" s={14} c="#fff"/>:<span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{s.num}</span>}
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:s.done?400:600,color:T.text,fontFamily:F,textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
-                      {!s.done&&<div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2,lineHeight:1.5}}>{s.sub}</div>}
-                    </div>
-                    {!s.done&&<button onClick={s.fn} style={{flexShrink:0,padding:"6px 12px",background:T.primary,border:"none",borderRadius:R.md,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",marginTop:1}}>{s.cta}</button>}
-                  </div>
-                ))}
-              </Card>
-            </div>
-          );
-        })()}
-
-        {/* Stock summary — staff sees kg remaining + % bar only, no delivery cost info */}
+                {/* Stock summary — staff sees kg remaining + % bar only, no delivery cost info */}
         {stock.current&&(()=>{
           const {delivery,remaining,pct,carryForward,sold}=stock.current;
           const bc=pct>40?T.success:pct>15?T.warning:T.danger;
@@ -1068,9 +1071,9 @@ const Dashboard = ({entries, stock, plantName, plantId, goEntry, goDayDetail, go
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // DAILY ENTRY
-// ═══════════════════════════════════════════════════════════════
+// =
 const DailyEntry = ({back, onSave, lastEntry, allEntries=[], allPrices=[], allDeliveries=[], pricePerKg, costPerKg, existingDates=[], role="owner"}) => {
   const now = new Date().toISOString().split("T")[0];
 
@@ -1432,9 +1435,9 @@ const DailyEntry = ({back, onSave, lastEntry, allEntries=[], allPrices=[], allDe
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // STOCK & REFILL
-// ═══════════════════════════════════════════════════════════════
+// =
 // Modal — bottom sheet for forms (must be top-level to prevent remount on state change)
 const Modal = ({title, onClose, children}) => (
   <div style={{position:"absolute",inset:0,background:T.overlay,display:"flex",alignItems:"flex-end",zIndex:100}}>
@@ -1810,14 +1813,14 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // P&L REPORT
-// ═══════════════════════════════════════════════════════════════
+// =
 const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPrice, initialMonth, standaloneExpenses=[], canExportPdf=true, onUpgrade}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
   const [pdfLoading, setPdfLoading] = useState(false);
-  // ── date helpers ─────────────────────────────────────────
+  // - date helpers -
   const todayISO  = () => new Date().toISOString().split("T")[0];
   const daysAgo   = (n) => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split("T")[0]; };
   const monthStart= (offset=0) => {
@@ -1865,7 +1868,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
     setShowPicker(false);
   };
 
-  // ── filter entries to date range ─────────────────────────
+  // - filter entries to date range -
   const filtered = entries.filter(e => e.date >= fromDate && e.date <= toDate);
   const days     = filtered.length;
 
@@ -1909,15 +1912,15 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
   standaloneFiltered.forEach(e=>{ expBd[e.category]=(expBd[e.category]||0)+(e.amount||0); });
   const expList = Object.entries(expBd).sort((a,b)=>b[1]-a[1]);
 
-  // ── range label for header ────────────────────────────────
+  // - range label for header -
   const rangeLabel = preset==="custom"
     ? `${fmtShort(fromDate)} – ${fmtShort(toDate)}`
     : PRESETS.find(p=>p.id===preset)?.label || "";
 
-  // ── PDF helper: format numbers without ₦ (jsPDF Helvetica lacks the glyph) ──
+  // - PDF helper: format numbers without ₦ (jsPDF Helvetica lacks the glyph) -
   const pdfFmt = (n) => "NGN " + Math.round(n).toLocaleString("en-NG");
 
-  // ── PDF export using jsPDF (loaded from CDN at export time) ──
+  // - PDF export using jsPDF (loaded from CDN at export time) -
   const exportPDF = async () => {
     setPdfLoading(true);
     try {
@@ -1943,7 +1946,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
       const pageH = doc.internal.pageSize.getHeight();
       const mg = 16;
 
-      // ── Header ──────────────────────────────────────────────
+      // - Header -
       doc.setFillColor(13, 59, 46);
       doc.rect(0, 0, pageW, 38, "F");
       doc.setTextColor(245, 200, 66);
@@ -1962,7 +1965,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
 
       let y = 48;
 
-      // ── KPI boxes ──────────────────────────────────────────
+      // - KPI boxes -
       doc.setFont("helvetica","normal");
       const kpis = [
         ["Revenue",      pdfFmt(mergedTotals.rev)],
@@ -1989,7 +1992,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
       });
       y += 48;
 
-      // ── Income statement ─────────────────────────────────
+      // - Income statement -
       doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
       doc.text("Income Statement", mg, y); y += 5;
       const incomeRows = [
@@ -2021,7 +2024,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
       });
       y = doc.lastAutoTable.finalY + 8;
 
-      // ── Variance check ──────────────────────────────────
+      // - Variance check -
       doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
       doc.text("Cash Variance Check", mg, y); y += 4;
       doc.autoTable({
@@ -2036,7 +2039,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
       });
       y = doc.lastAutoTable.finalY + 8;
 
-      // ── Day-by-day ──────────────────────────────────────
+      // - Day-by-day -
       if (filtered.length > 0) {
         doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(13,59,46);
         doc.text("Day-by-Day Breakdown", mg, y); y += 4;
@@ -2079,7 +2082,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
         y = doc.lastAutoTable.finalY + 8;
       }
 
-      // ── Prepared by / Date lines — bottom of last content page ──
+      // - Prepared by / Date lines — bottom of last content page -
       // Only add if enough space on current page, otherwise skip
       if (y + 25 < pageH - 20) {
         doc.setDrawColor(200); doc.setLineWidth(0.3);
@@ -2091,7 +2094,7 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
         doc.text("Date",        pageW/2+10,  sigY+5);
       }
 
-      // ── Page footer ──────────────────────────────────────
+      // - Page footer -
       const pages = doc.getNumberOfPages();
       for (let i=1;i<=pages;i++) {
         doc.setPage(i);
@@ -2352,9 +2355,9 @@ const PnLScreen = ({entries, prices=[], deliveries=[], back, sellPrice, costPric
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // HISTORY
-// ═══════════════════════════════════════════════════════════════
+// =
 const HistoryScreen = ({entries, prices=[], deliveries=[], back, goDayDetail, sellPrice, costPrice, role="owner"}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
@@ -2406,9 +2409,9 @@ const HistoryScreen = ({entries, prices=[], deliveries=[], back, goDayDetail, se
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // DAY DETAIL
-// ═══════════════════════════════════════════════════════════════
+// =
 const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwner}) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
@@ -2503,7 +2506,7 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
         {ok  && <div style={{background:`${T.success}12`,borderRadius:R.md,padding:"10px 14px",marginBottom:12,fontSize:13,color:T.success,fontFamily:F}}>{ok}</div>}
         {err && <div style={{background:`${T.danger}12`, borderRadius:R.md,padding:"10px 14px",marginBottom:12,fontSize:13,color:T.danger, fontFamily:F}}>{err}</div>}
 
-        {/* ── VIEW MODE ── */}
+        {/* - VIEW MODE - */}
         {mode==="view" && (<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
             <StatTile label="Total sales"  value={fmt(c.sales)} color={T.text}/>
@@ -2550,7 +2553,7 @@ const DayDetail = ({entry, back, sellPrice, costPrice, onUpdate, onDelete, isOwn
           <div style={{marginTop:8}}><Btn label="Back to history" onClick={back} variant="outline" size="lg"/></div>
         </>)}
 
-        {/* ── EDIT MODE ── */}
+        {/* - EDIT MODE - */}
         {mode==="edit" && (<>
           {/* Live preview bar */}
           {(gas>0||sales>0)&&(
@@ -2689,12 +2692,12 @@ const SettingsSubScreen = ({ title, onBack, children }) => (
   </div>
 );
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // SETTINGS SCREEN
-// ═══════════════════════════════════════════════════════════════
+// =
 const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMembers=[], liveCost=0, planLimits={}, plantDoc=null }) => {
   const role = profile?.role || "owner";
-  // ── Load Paystack script on mount ────────────────────────
+  // - Load Paystack script on mount -
   useEffect(() => {
     if (window.PaystackPop) return;
     const s = document.createElement("script");
@@ -2703,7 +2706,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     document.head.appendChild(s);
   }, []);
 
-  // ── Billing state ─────────────────────────────────────────
+  // - Billing state -
   const [billingLd,  setBillingLd]  = useState("");
   const [billingErr, setBillingErr] = useState("");
   const [billingOk,  setBillingOk]  = useState("");
@@ -2797,19 +2800,19 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     finally { setPwLd(false); }
   };
 
-  // ── Invite / staff management state ─────────────────────
+  // - Invite / staff management state -
   const [inviteEmail,   setInviteEmail]   = useState("");
   const [inviteLd,      setInviteLd]      = useState(false);
   const [inviteErr,     setInviteErr]     = useState("");
   const [inviteOk,      setInviteOk]      = useState("");
   const [confirmAction, setConfirmAction] = useState(null);
 
-  // ── shared sub-screen shell — defined outside to prevent remount ──
+  // - shared sub-screen shell — defined outside to prevent remount -
   const backFromSub = useCallback(() => {
     setSub(null); setNameMsg(""); setEmailErr(""); setEmailOk(false); setPwErr(""); setPwOk(false);
   }, []);
 
-  // ── Plant name sub-screen ────────────────────────────────
+  // - Plant name sub-screen -
   if (sub === "plant") return (
     <SettingsSubScreen title="Plant name" onBack={backFromSub}>
       <p style={{fontSize:13,color:T.muted,fontFamily:F,lineHeight:1.6,marginBottom:20}}>This name appears on your dashboard and all reports.</p>
@@ -2823,7 +2826,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     </SettingsSubScreen>
   );
 
-  // ── Change email sub-screen ──────────────────────────────
+  // - Change email sub-screen -
   if (sub === "email") return (
     <SettingsSubScreen title="Change email" onBack={backFromSub}>
       {emailOk ? (
@@ -2859,7 +2862,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     </SettingsSubScreen>
   );
 
-  // ── Change password sub-screen ───────────────────────────
+  // - Change password sub-screen -
   if (sub === "password") return (
     <SettingsSubScreen title="Change password" onBack={backFromSub}>
       {pwOk ? (
@@ -2897,7 +2900,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     </SettingsSubScreen>
   );
 
-  // ── Staff management state ───────────────────────────────
+  // - Staff management state -
   // invites and staffMembers now passed as props from Root (avoids duplicate Firestore listeners)
 
 
@@ -2944,7 +2947,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     }
   };
 
-  // ── Staff sub-screen ─────────────────────────────────────
+  // - Staff sub-screen -
   if (sub === "staff") return (
     <SettingsSubScreen title="Staff access" onBack={backFromSub}>
       {/* Invite form */}
@@ -3053,7 +3056,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     </SettingsSubScreen>
   );
 
-  // ── Default cost price sub-screen ───────────────────────
+  // - Default cost price sub-screen -
   if (sub === "notifications") return (
     <SettingsSubScreen title="Notifications" onBack={backFromSub}>
       <div style={{background:`${T.primary}08`,borderRadius:R.lg,padding:"12px 14px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
@@ -3103,7 +3106,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
     </SettingsSubScreen>
   );
 
-  // ── Main settings list ───────────────────────────────────
+  // - Main settings list -
   const Row = ({icon, label, sub, value, onClick, danger}) => (
     <div onClick={onClick} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",borderBottom:`1px solid ${T.border}`,background:T.surface,transition:"background .12s"}}
       onMouseEnter={e=>e.currentTarget.style.background=T.bg}
@@ -3185,7 +3188,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
           <Row icon="lock"   label="Password"       sub="Change your password" onClick={()=>{ setCurPw(""); setNewPw(""); setConfPw(""); setPwErr(""); setPwOk(false); setSub("password"); }}/>
         </div>
 
-        {/* ── Plan & Billing section ─────────────────────── */}
+        {/* - Plan & Billing section - */}
         {(()=>{
           const PLANS = [
             {
@@ -3334,7 +3337,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
         <div style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
           <div style={{padding:"12px 16px",background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Version</span>
-            <span style={{fontSize:14,color:T.muted,fontFamily:F}}>2.0.1</span>
+            <span style={{fontSize:14,color:T.muted,fontFamily:F}}>1.0.1.1</span>
           </div>
           <div style={{padding:"12px 16px",background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Plant ID</span>
@@ -3342,7 +3345,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
           </div>
           <div style={{padding:"12px 16px",background:T.surface,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Built by</span>
-            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty · mustydevops.com.ng</span>
+            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty </span>
           </div>
         </div>
 
@@ -3359,9 +3362,9 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // REMITTANCE / CASH DRAWER RECONCILIATION
-// ═══════════════════════════════════════════════════════════════
+// =
 const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) => {
   const today     = new Date().toISOString().split("T")[0];
   const todayEntry= entries.find(e => e.date === today);
@@ -3418,14 +3421,14 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
     } finally { setLd(false); }
   };
 
-  // ── Status colours ─────────────────────────────────────────
+  // - Status colours -
   const statusStyle = {
     match:     { bg:`${T.success}12`, border:T.success,  c:T.success,  label:"Exact match",            icon:"check"  },
     surplus:   { bg:`${T.warning}12`, border:T.warning,  c:T.warning,  label:"Surplus — over-collected",icon:"alert"  },
     shortfall: { bg:`${T.danger}12`,  border:T.danger,   c:T.danger,   label:"Shortfall — cash missing", icon:"alert"  },
   }[status] || null;
 
-  // ── Done screen ────────────────────────────────────────────
+  // - Done screen -
   if (done) {
     const ss = statusStyle;
     return (
@@ -3670,12 +3673,12 @@ const RemittanceScreen = ({ entries, remittances, onSave, back, submittedBy }) =
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // MONTHLY SUMMARY SCREEN
-// ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// =
+// =
 // EXPENSES SCREEN — standalone expense tracker with date
-// ═══════════════════════════════════════════════════════════════
+// =
 const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back }) => {
   const CATS = ["Salary","Utility","Maintenance","Repairs","Transport","Miscellaneous","Security","Generator","Office","Rent","Other"];
 
@@ -3715,7 +3718,7 @@ const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back 
   };
 
   // Filter + group by month
-  // ── Merge all expense sources ─────────────────────────────
+  // - Merge all expense sources -
   // 1. Standalone (owner + staff shift)
   const standaloneList = expenses.map(e => ({
     ...e,
@@ -3945,7 +3948,7 @@ const ExpensesScreen = ({ expenses, entries=[], onAdd, onUpdate, onDelete, back 
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 const MonthlySummaryScreen = ({ entries, prices=[], deliveries=[], back, goMonthPnL, sellPrice, costPrice, standaloneExpenses=[] }) => {
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
@@ -4099,12 +4102,12 @@ const MonthlySummaryScreen = ({ entries, prices=[], deliveries=[], back, goMonth
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
+// =
 // STAFF EXPENSE SCREEN
 // Staff records shift expenses: generator fuel, gas gifts, petty cash
 // Stored in the same standaloneExpenses collection — visible to owner
-// ═══════════════════════════════════════════════════════════════
-// ── Staff Expenses List — shows all staff's own expenses + Add button ──
+// =
+// - Staff Expenses List — shows all staff's own expenses + Add button -
 const StaffExpensesListScreen = ({ onAdd, onUpdate, onDelete, submittedBy, back, allExpenses=[] }) => {
   const [showAdd, setShowAdd] = useState(false);
 
@@ -4607,7 +4610,7 @@ const EntryHubScreen = ({ onNewEntry, onAllEntries, back }) => (
   </div>
 );
 
-// ═══════════════════════════════════════════════════════════════
+// =
 export default function GasLedgerApp() {
   const {user, loading:authLd}    = useAuth();
   const {profile, loading:profLd} = useUserProfile(user?.uid);
@@ -4649,7 +4652,7 @@ export default function GasLedgerApp() {
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
 
-  // ── Notifications ──────────────────────────────────────────
+  // - Notifications -
   const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries||[], standaloneExpenses||[], role);
 
 
@@ -4747,13 +4750,13 @@ export default function GasLedgerApp() {
     </div>
   );
 
-  // ── Auth loading ──────────────────────────────────────────
+  // - Auth loading -
   if (authLd || (user && (profLd || !inviteChecked))) return <Shell><Spinner/></Shell>;
 
-  // ── Not logged in ─────────────────────────────────────────
+  // - Not logged in -
   if (!user) return <Shell><AuthScreen onAuthed={()=>{ setInviteChecked(false); }}/></Shell>;
 
-  // ── Logged in, pending invite, no profile yet ─────────────
+  // - Logged in, pending invite, no profile yet -
   if (pendingInvite && !profile?.plantId) return (
     <Shell>
       <InviteAcceptScreen
@@ -4764,10 +4767,10 @@ export default function GasLedgerApp() {
     </Shell>
   );
 
-  // ── Logged in, no plant, no invite ────────────────────────
+  // - Logged in, no plant, no invite -
   if (!profile?.plantId) return <Shell><SetupScreen user={user}/></Shell>;
 
-  // ── Access revoked — staff removed by owner ────────────────
+  // - Access revoked — staff removed by owner -
   if (profile?.role === "revoked") return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,padding:32,gap:16,fontFamily:F,textAlign:"center"}}>
@@ -4785,10 +4788,10 @@ export default function GasLedgerApp() {
     </Shell>
   );
 
-  // ── Data loading ──────────────────────────────────────────
+  // - Data loading -
   if ((eLd||dLd||pLd) && screen==="dashboard") return <Shell><Spinner/></Shell>;
 
-  // ── Gate function — blocks staff from owner-only screens ──
+  // - Gate function — blocks staff from owner-only screens -
   const Gate = ({children, allowed=true}) => allowed ? children : (
     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,padding:32,gap:16,fontFamily:F}}>
       <div style={{width:52,height:52,borderRadius:"50%",background:`${T.danger}12`,display:"flex",alignItems:"center",justifyContent:"center"}}>
