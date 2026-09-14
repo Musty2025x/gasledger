@@ -686,15 +686,6 @@ const Dashboard = ({entries, stock, plantName, plantId, goEntry, goDayDetail, go
   const [hide,        setHide]        = useState(false);
   const [showNotifs,  setShowNotifs]  = useState(false);
 
-  // Clear any stale setup-done keys with bad plant identifiers
-  useEffect(() => {
-    try {
-      ["undefined","plant",""].forEach(bad => {
-        const k = `gasledger_setup_done_${bad}`;
-        if (localStorage.getItem(k)) localStorage.removeItem(k);
-      });
-    } catch {}
-  }, []);
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
 
@@ -809,14 +800,9 @@ const Dashboard = ({entries, stock, plantName, plantId, goEntry, goDayDetail, go
           const hasEntry    = entries.length > 0;
           const allDone     = hasDelivery && hasPrice && hasEntry;
 
-          // Dismiss permanently after first entry — use plantId for reliable unique key
-          const dismissKey = `gasledger_setup_done_${plantId||plantName||"plant"}`;
-          const dismissed  = (() => { try { return !!localStorage.getItem(dismissKey); } catch { return false; } })();
-          if (dismissed) return null;
-          if (allDone) {
-            try { localStorage.setItem(dismissKey, "1"); } catch {}
-            return null;
-          }
+          // Show checklist until all 3 steps completed — no localStorage needed
+          // Once allDone, the checklist disappears naturally (entries.length > 0 means they've started)
+          if (allDone) return null;
 
           // After delivery + price set → show celebration + CTA to log first entry
           if (hasDelivery && hasPrice && !hasEntry) return (
