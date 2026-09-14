@@ -682,16 +682,17 @@ const useNotifications = (plantId, ownerUid, entries, standaloneExpenses, role) 
   return { unread, notifs, markAllRead };
 };
 
-const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[], role="owner", onSignOut, notifs=[], unread=0, onMarkRead}) => {
+const Dashboard = ({entries, stock, plantName, plantId, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[], role="owner", onSignOut, notifs=[], unread=0, onMarkRead}) => {
   const [hide,        setHide]        = useState(false);
   const [showNotifs,  setShowNotifs]  = useState(false);
 
-  // Clear stale localStorage key if plantName was undefined on a previous session
+  // Clear any stale setup-done keys with bad plant identifiers
   useEffect(() => {
     try {
-      if (localStorage.getItem("gasledger_setup_done_undefined")) {
-        localStorage.removeItem("gasledger_setup_done_undefined");
-      }
+      ["undefined","plant",""].forEach(bad => {
+        const k = `gasledger_setup_done_${bad}`;
+        if (localStorage.getItem(k)) localStorage.removeItem(k);
+      });
     } catch {}
   }, []);
   const SP = sellPrice || DEFAULT_SELL_PRICE;
@@ -808,8 +809,8 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
           const hasEntry    = entries.length > 0;
           const allDone     = hasDelivery && hasPrice && hasEntry;
 
-          // Dismiss permanently after first entry using localStorage
-          const dismissKey = `gasledger_setup_done_${plantName||"plant"}`;
+          // Dismiss permanently after first entry — use plantId for reliable unique key
+          const dismissKey = `gasledger_setup_done_${plantId||plantName||"plant"}`;
           const dismissed  = (() => { try { return !!localStorage.getItem(dismissKey); } catch { return false; } })();
           if (dismissed) return null;
           if (allDone) {
@@ -4820,7 +4821,7 @@ export default function GasLedgerApp() {
   return (
     <Shell>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser} notifs={notifs} unread={unread} onMarkRead={markAllRead}/>}
+        {screen==="dashboard"   && <Dashboard entries={entries} stock={stock} plantName={profile.displayName} plantId={plantId} goEntry={()=>setScreen("entry")} goDayDetail={openDetail} goStock={()=>setScreen("stock")} goSetPrice={()=>{ setScreen("stock"); window.__stockTab="prices"; }} sellPrice={livePrice} costPrice={liveCost} standaloneExpenses={standaloneExpenses} role={role} onSignOut={signOutUser} notifs={notifs} unread={unread} onMarkRead={markAllRead}/>}
         {screen==="entryhub"    && <EntryHubScreen onNewEntry={()=>setScreen("entry")} onAllEntries={()=>setScreen("history")} back={()=>setScreen("dashboard")}/> }
         {screen==="entry"       && <DailyEntry back={()=>setScreen("dashboard")} onSave={addEntry} lastEntry={entries[0]} allEntries={entries} allPrices={prices} allDeliveries={deliveries} pricePerKg={livePrice} costPerKg={liveCost} existingDates={entries.map(e=>e.date)} role={role}/>}
         {screen==="stock"       && <Gate allowed={!isStaff}><StockScreen stock={stock} prices={prices} onAddDelivery={addDelivery} onAddPrice={addPrice} onUpdateDelivery={updateDelivery} onDeleteDelivery={deleteDelivery} onDeletePrice={deletePrice} onUpdatePrice={updatePriceItem} loading={dLd||pLd} back={()=>setScreen("dashboard")}/></Gate>}
