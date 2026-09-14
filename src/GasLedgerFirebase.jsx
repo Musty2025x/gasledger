@@ -41,7 +41,7 @@ const getPlanLimits = (plan) => {
   if (plan === "pro")   return { maxStaff:Infinity, maxEntries:Infinity, pdf:true,  whatsapp:true,  notifications:true  };
   if (plan === "basic") return { maxStaff:2,        maxEntries:Infinity, pdf:true,  whatsapp:true,  notifications:true  };
   return                       { maxStaff:0,        maxEntries:30,       pdf:false, whatsapp:false, notifications:false };
-};F
+};
 
 
 // - Tokens -
@@ -729,8 +729,8 @@ const OnboardingChecklist = ({ entries, stock, sellPrice, goEntry, goStock, goSe
       {doneCount===0&&(
         <div style={{marginBottom:12,borderRadius:R.lg,overflow:"hidden",border:`1px solid ${T.border}`}}>
           <div style={{background:T.primary,padding:"14px 16px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F,marginBottom:2}}>Here's what you're building 👇</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Complete 3 steps to unlock your live dashboard</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F,marginBottom:2}}>Welcome to GasLedger 👋</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Set up your plant in 3 steps — your live dashboard will look like this</div>
           </div>
           {/* Mock blurred dashboard preview */}
           <div style={{background:T.bg,padding:"12px 14px",filter:"blur(1.5px)",userSelect:"none",pointerEvents:"none"}}>
@@ -3345,7 +3345,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
           </div>
           <div style={{padding:"12px 16px",background:T.surface,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Built by</span>
-            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty </span>
+            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty</span>
           </div>
         </div>
 
