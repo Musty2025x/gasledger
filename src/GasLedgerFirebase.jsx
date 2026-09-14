@@ -581,14 +581,10 @@ const NotificationsPanel = ({ notifs, onClose, onMarkRead }) => (
 // WHATSAPP NOTIFICATION
 // Fallback: opens WhatsApp with pre-filled message on owner's device
 // ═══════════════════════════════════════════════════════════════
-const ONESIGNAL_APP_ID = "f08bb63c-1fc1-4933-9329-552403c4264f";
+// Push notifications via FCM — coming when Firebase Blaze is available
+// In-app bell notifications are active and working
 
 // ── Notification hook — watches for staff activity since last visit ──
-// ═══════════════════════════════════════════════════════════════
-// WHATSAPP NOTIFICATION via UltraMsg
-// Free tier: 500 messages/month · works in Nigeria
-// Credentials stored in Firestore plant doc (readable by staff)
-// ═══════════════════════════════════════════════════════════════
 const sendWhatsAppNotif = async (phone, token, instanceId, message) => {
   if (!phone || !token || !instanceId) return;
   try {
@@ -4634,6 +4630,8 @@ export default function GasLedgerApp() {
   const [detail,        setDetail]        = useState(null);
   // Navigate with back-tracking
   const goScreen = (s) => { setPrevScreen(screen); setScreen(s); };
+  // Open day detail view
+  const openDetail = (entry) => { setDetail(entry); setScreen("detail"); };
   const [pendingInvite, setPendingInvite] = useState(null);
   const [inviteChecked, setInviteChecked] = useState(false);
   const [monthlyKey,    setMonthlyKey]    = useState(null); // "2025-06" → opens P&L for that month
@@ -4664,13 +4662,8 @@ export default function GasLedgerApp() {
   const livePrice = latestPrice(prices);
   const liveCost  = latestCostPrice(deliveries) || profile?.defaultCostPrice || DEFAULT_COST_PRICE;
 
-
-
   // ── Notifications ──────────────────────────────────────────
   const { unread, notifs, markAllRead } = useNotifications(plantId, user?.uid, entries||[], standaloneExpenses||[], role);
-
-  // WhatsApp credentials — read from Firestore plant doc (set by owner, readable by all plant members)
-  // This ensures staff devices can send notifications to the owner
 
 
   const addEntry      = useCallback(async (e) => {
