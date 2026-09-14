@@ -689,6 +689,15 @@ const useNotifications = (plantId, ownerUid, entries, standaloneExpenses, role) 
 const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, goSetPrice, sellPrice, costPrice, standaloneExpenses=[], role="owner", onSignOut, notifs=[], unread=0, onMarkRead}) => {
   const [hide,        setHide]        = useState(false);
   const [showNotifs,  setShowNotifs]  = useState(false);
+
+  // Clear stale localStorage key if plantName was undefined on a previous session
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("gasledger_setup_done_undefined")) {
+        localStorage.removeItem("gasledger_setup_done_undefined");
+      }
+    } catch {}
+  }, []);
   const SP = sellPrice || DEFAULT_SELL_PRICE;
   const CP = costPrice || DEFAULT_COST_PRICE;
 
@@ -797,14 +806,14 @@ const Dashboard = ({entries, stock, plantName, goEntry, goDayDetail, goStock, go
       <div style={{flex:1,overflow:"auto",padding:"16px 16px 16px"}}>
 
         {/* Onboarding checklist — owner only */}
-        {role==="owner"&&(()=>{
-          const hasDelivery = stock.periods.length > 0;
+        {role==="owner"&&stock&&(()=>{
+          const hasDelivery = (stock.periods||[]).length > 0;
           const hasPrice    = SP > DEFAULT_SELL_PRICE || (sellPrice && sellPrice > 0);
           const hasEntry    = entries.length > 0;
           const allDone     = hasDelivery && hasPrice && hasEntry;
 
           // Dismiss permanently after first entry using localStorage
-          const dismissKey = `gasledger_setup_done_${plantName}`;
+          const dismissKey = `gasledger_setup_done_${plantName||"plant"}`;
           const dismissed  = (() => { try { return !!localStorage.getItem(dismissKey); } catch { return false; } })();
           if (dismissed) return null;
           if (allDone) {
