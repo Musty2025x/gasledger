@@ -3345,7 +3345,7 @@ const SettingsScreen = ({ user, profile, plantId, onSignOut, invites=[], staffMe
           </div>
           <div style={{padding:"12px 16px",background:T.surface,display:"flex",justifyContent:"space-between"}}>
             <span style={{fontSize:14,color:T.text,fontFamily:F}}>Built by</span>
-            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Musty · mustydevops.com.ng</span>
+            <span style={{fontSize:13,color:T.primary,fontFamily:F}}>Sodiq Ajibola</span>
           </div>
         </div>
 
