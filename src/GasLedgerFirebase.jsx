@@ -689,111 +689,169 @@ const OnboardingChecklist = ({ entries, stock, sellPrice, goEntry, goStock, goSe
   const hasEntry    = (entries||[]).length > 0;
   const allDone     = hasDelivery && hasPrice && hasEntry;
 
+  // Show demo video on very first visit — dismissed by watching or skipping
+  const [showVideo, setShowVideo] = useState(() => {
+    try { return !localStorage.getItem("gasledger_demo_seen"); }
+    catch { return false; }
+  });
+
+  const dismissVideo = () => {
+    try { localStorage.setItem("gasledger_demo_seen", "1"); } catch {}
+    setShowVideo(false);
+  };
+
   if (allDone) return null;
 
-  // After delivery + price set → show celebration + CTA to log first entry
-  if (hasDelivery && hasPrice && !hasEntry) return (
-    <div style={{marginBottom:16}}>
-      <Card pad="0">
-        <div style={{background:T.primary,borderRadius:`${R.lg}px ${R.lg}px 0 0`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <Icon n="check" s={18} c={T.gold}/>
-          </div>
-          <div>
-            <div style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:F}}>Plant is ready! 🎉</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:2,fontFamily:F}}>Delivery and price set — log your first entry to start tracking profit</div>
-          </div>
-        </div>
-        <div style={{padding:"12px 16px"}}>
-          <button onClick={goEntry}
-            style={{width:"100%",padding:"11px",background:T.primary,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            <Icon n="plus" s={15} c="#fff"/>
-            Log today's entry
-          </button>
-        </div>
-      </Card>
-    </div>
-  );
-
-  const steps = [
-    {done:hasDelivery,num:1,title:"Log your first delivery",   sub:"Record how much gas you received and the supplier cost per kg.", cta:"Add delivery",fn:goStock},
-    {done:hasPrice,   num:2,title:"Set your selling price",    sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",   fn:goSetPrice},
-    {done:hasEntry,   num:3,title:"Log your first daily entry",sub:"Record today's meter readings and cash collected.",               cta:"New entry",   fn:goEntry},
-  ];
-  const doneCount = steps.filter(s=>s.done).length;
-  const pct       = Math.round((doneCount/3)*100);
+  // YouTube video ID — replace with your actual video ID after uploading
+  const VIDEO_ID = "YOUR_YOUTUBE_VIDEO_ID";
+  const hasVideo = VIDEO_ID !== "YOUR_YOUTUBE_VIDEO_ID";
 
   return (
-    <div style={{marginBottom:16}}>
-      {/* Preview card — shown only before any step is done */}
-      {doneCount===0&&(
-        <div style={{marginBottom:12,borderRadius:R.lg,overflow:"hidden",border:`1px solid ${T.border}`}}>
-          <div style={{background:T.primary,padding:"14px 16px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F,marginBottom:2}}>Welcome to GasLedger 👋</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Set up your plant in 3 steps — your live dashboard will look like this</div>
+    <>
+      {/* Demo video modal */}
+      {showVideo && hasVideo && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
+          {/* Skip button */}
+          <div style={{width:"100%",maxWidth:480,display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+            <button onClick={dismissVideo}
+              style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:R.pill,padding:"7px 16px",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:6}}>
+              Skip →
+            </button>
           </div>
-          {/* Mock blurred dashboard preview */}
-          <div style={{background:T.bg,padding:"12px 14px",filter:"blur(1.5px)",userSelect:"none",pointerEvents:"none"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-              {[["Today's Sales","₦112,400",T.text],["Gross Profit","₦38,200",T.success]].map(([l,v,c])=>(
-                <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:10,color:T.muted,fontFamily:F,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>{l}</div>
-                  <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:F}}>{v}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                <span style={{fontSize:11,color:T.muted,fontFamily:F}}>Stock remaining</span>
-                <span style={{fontSize:11,fontWeight:600,color:T.success,fontFamily:F}}>68%</span>
-              </div>
-              <div style={{height:6,borderRadius:R.pill,background:T.bg2}}>
-                <div style={{height:"100%",width:"68%",background:T.success,borderRadius:R.pill}}/>
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-              {[["Revenue","₦748k"],["COGS","−₦560k"],["Margin","25%"]].map(([l,v])=>(
-                <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"8px 10px",textAlign:"center",border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:F}}>{v}</div>
-                  <div style={{fontSize:9,color:T.muted,fontFamily:F,marginTop:2}}>{l}</div>
-                </div>
-              ))}
+          {/* Video */}
+          <div style={{width:"100%",maxWidth:480,borderRadius:R.lg,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.5)"}}>
+            <div style={{position:"relative",paddingBottom:"56.25%",height:0}}>
+              <iframe
+                src={`https://www.youtube.com/embed/${VIDEO_ID}?autoplay=1&rel=0&modestbranding=1`}
+                style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}}
+                allow="autoplay; fullscreen"
+                allowFullScreen
+              />
             </div>
           </div>
-          <div style={{background:`${T.primary}08`,padding:"10px 14px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:12,color:T.primary,fontWeight:600,fontFamily:F}}>Your live data appears here</span>
-            <div style={{display:"flex",gap:4}}>
-              {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:i===0?T.primary:T.border}}/>)}
-            </div>
+          {/* Caption */}
+          <div style={{marginTop:16,textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:600,color:"#fff",fontFamily:F,marginBottom:4}}>See GasLedger in action</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,.5)",fontFamily:F}}>Watch how to set up and use your gas plant dashboard</div>
           </div>
+          {/* Done button */}
+          <button onClick={dismissVideo}
+            style={{marginTop:16,background:T.primary,border:"none",borderRadius:R.md,padding:"12px 32px",color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:F}}>
+            Get started →
+          </button>
         </div>
       )}
 
-      {/* Setup checklist */}
-      <Card pad="0">
-        <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started — {doneCount} of 3 done</div>
-            <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{pct}%</span>
-          </div>
-          <div style={{height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
-            <div style={{height:"100%",width:`${pct}%`,background:T.primary,borderRadius:R.pill,transition:"width .4s ease"}}/>
-          </div>
+      {/* After delivery + price set → celebration card */}
+      {hasDelivery && hasPrice && !hasEntry && (
+        <div style={{marginBottom:16}}>
+          <Card pad="0">
+            <div style={{background:T.primary,borderRadius:`${R.lg}px ${R.lg}px 0 0`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <Icon n="check" s={18} c={T.gold}/>
+              </div>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:F}}>Plant is ready! 🎉</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:2,fontFamily:F}}>Delivery and price set — log your first entry to start tracking profit</div>
+              </div>
+            </div>
+            <div style={{padding:"12px 16px"}}>
+              <button onClick={goEntry}
+                style={{width:"100%",padding:"11px",background:T.primary,border:"none",borderRadius:R.md,fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                <Icon n="plus" s={15} c="#fff"/>
+                Log today's entry
+              </button>
+            </div>
+          </Card>
         </div>
-        {steps.map((s,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",opacity:s.done?0.55:1}}>
-            <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,marginTop:1,background:s.done?T.success:`${T.primary}12`,border:`1.5px solid ${s.done?T.success:T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              {s.done?<Icon n="check" s={14} c="#fff"/>:<span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{s.num}</span>}
-            </div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:s.done?400:600,color:T.text,fontFamily:F,textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
-              {!s.done&&<div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2,lineHeight:1.5}}>{s.sub}</div>}
-            </div>
-            {!s.done&&<button onClick={s.fn} style={{flexShrink:0,padding:"6px 12px",background:T.primary,border:"none",borderRadius:R.md,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",marginTop:1}}>{s.cta}</button>}
+      )}
+
+      {/* 3-step checklist */}
+      {!(hasDelivery && hasPrice) && (() => {
+        const steps = [
+          {done:hasDelivery,num:1,title:"Log your first delivery",   sub:"Record how much gas you received and the supplier cost per kg.", cta:"Add delivery",fn:goStock},
+          {done:hasPrice,   num:2,title:"Set your selling price",    sub:"Enter the current price per kg. This auto-fills every daily entry.",cta:"Set price",   fn:goSetPrice},
+          {done:hasEntry,   num:3,title:"Log your first daily entry",sub:"Record today's meter readings and cash collected.",               cta:"New entry",   fn:goEntry},
+        ];
+        const doneCount = steps.filter(s=>s.done).length;
+        const pct       = Math.round((doneCount/3)*100);
+        return (
+          <div style={{marginBottom:16}}>
+            {/* Preview card */}
+            {doneCount===0&&(
+              <div style={{marginBottom:12,borderRadius:R.lg,overflow:"hidden",border:`1px solid ${T.border}`}}>
+                <div style={{background:T.primary,padding:"14px 16px"}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#fff",fontFamily:F,marginBottom:2}}>Welcome to GasLedger 👋</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontFamily:F}}>Set up your plant in 3 steps — your live dashboard will look like this</div>
+                </div>
+                {/* Blurred mock preview */}
+                <div style={{background:T.bg,padding:"12px 14px",filter:"blur(1.5px)",userSelect:"none",pointerEvents:"none"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                    {[["Today's Sales","₦112,400",T.text],["Gross Profit","₦38,200",T.success]].map(([l,v,c])=>(
+                      <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:10,color:T.muted,fontFamily:F,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>{l}</div>
+                        <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:F}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{background:T.surface,borderRadius:R.md,padding:"10px 12px",border:`1px solid ${T.border}`,marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                      <span style={{fontSize:11,color:T.muted,fontFamily:F}}>Stock remaining</span>
+                      <span style={{fontSize:11,fontWeight:600,color:T.success,fontFamily:F}}>68%</span>
+                    </div>
+                    <div style={{height:6,borderRadius:R.pill,background:T.bg2}}>
+                      <div style={{height:"100%",width:"68%",background:T.success,borderRadius:R.pill}}/>
+                    </div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                    {[["Revenue","₦748k"],["COGS","−₦560k"],["Margin","25%"]].map(([l,v])=>(
+                      <div key={l} style={{background:T.surface,borderRadius:R.md,padding:"8px 10px",textAlign:"center",border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:F}}>{v}</div>
+                        <div style={{fontSize:9,color:T.muted,fontFamily:F,marginTop:2}}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Footer */}
+                <div style={{background:`${T.primary}08`,padding:"10px 14px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:12,color:T.primary,fontWeight:600,fontFamily:F}}>Your live data appears here</span>
+                  {hasVideo&&(
+                    <button onClick={()=>setShowVideo(true)}
+                      style={{background:T.primary,border:"none",borderRadius:R.pill,padding:"5px 12px",fontSize:11,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",gap:5}}>
+                      ▶ Watch demo
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Checklist */}
+            <Card pad="0">
+              <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:F}}>Getting started — {doneCount} of 3 done</div>
+                  <span style={{fontSize:11,fontWeight:600,color:T.primary,fontFamily:F}}>{pct}%</span>
+                </div>
+                <div style={{height:5,borderRadius:R.pill,background:T.bg2,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:T.primary,borderRadius:R.pill,transition:"width .4s ease"}}/>
+                </div>
+              </div>
+              {steps.map((s,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",opacity:s.done?0.55:1}}>
+                  <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,marginTop:1,background:s.done?T.success:`${T.primary}12`,border:`1.5px solid ${s.done?T.success:T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {s.done?<Icon n="check" s={14} c="#fff"/>:<span style={{fontSize:11,fontWeight:700,color:T.primary,fontFamily:F}}>{s.num}</span>}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:s.done?400:600,color:T.text,fontFamily:F,textDecoration:s.done?"line-through":"none"}}>{s.title}</div>
+                    {!s.done&&<div style={{fontSize:11,color:T.muted,fontFamily:F,marginTop:2,lineHeight:1.5}}>{s.sub}</div>}
+                  </div>
+                  {!s.done&&<button onClick={s.fn} style={{flexShrink:0,padding:"6px 12px",background:T.primary,border:"none",borderRadius:R.md,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:F,whiteSpace:"nowrap",marginTop:1}}>{s.cta}</button>}
+                </div>
+              ))}
+            </Card>
           </div>
-        ))}
-      </Card>
-    </div>
+        );
+      })()}
+    </>
   );
 };
 
@@ -1634,6 +1692,17 @@ const StockScreen = ({stock, prices, onAddDelivery, onAddPrice, onUpdateDelivery
                     </span>
                   </div>
                 )}
+                {/* Edit / Delete active delivery */}
+                <div style={{display:"flex",gap:8,marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+                  <button onClick={()=>openEditDel(cur.delivery)}
+                    style={{flex:1,padding:"8px",background:`${T.primary}10`,border:`1px solid ${T.primary}20`,borderRadius:R.sm,fontSize:12,fontWeight:600,color:T.primary,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                    <Icon n="lock" s={13} c={T.primary}/> Edit delivery
+                  </button>
+                  <button onClick={()=>handleDeleteDelivery(cur.delivery)}
+                    style={{flex:1,padding:"8px",background:`${T.danger}10`,border:`1px solid ${T.danger}20`,borderRadius:R.sm,fontSize:12,fontWeight:600,color:T.danger,cursor:"pointer",fontFamily:F,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                    <Icon n="close" s={13} c={T.danger}/> Delete
+                  </button>
+                </div>
               </div>
             </Card>
             );
