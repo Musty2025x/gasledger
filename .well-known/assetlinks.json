@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "hggas.gasledger.com.ng.twa",
+      "sha256_cert_fingerprints": [
+        "C4:00:A5:DF:A4:02:B9:59:8F:73:DB:87:E6:F2:26:25:91:27:E9:07:C0:98:A4:68:89:50:BE:85:C0:98:25:2D"
+      ]
+    }
+  }
+]
